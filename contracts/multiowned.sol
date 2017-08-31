@@ -1,7 +1,6 @@
 // Code taken from https://github.com/ethereum/dapp-bin/blob/master/wallet/wallet.sol
-// Audit by github.com/Eenae
+// Audit and improvements by github.com/Eenae
 
-// Multi-sig, daily-limited account proxy/wallet.
 // @authors:
 // Gav Wood <g@ethdev.com>
 // inheritable "property" contract that enables methods to be protected by requiring the acquiescence of either a
@@ -19,8 +18,13 @@ contract multiowned {
 
     // struct for the status of a pending operation.
     struct PendingState {
+        // count of confirmations needed
         uint yetNeeded;
+
+        // bitmap of confirmations where owner #ownerIndex's decision corresponds to 2**ownerIndex bit
         uint ownersDone;
+
+        // position of this operation key in m_pendingIndex
         uint index;
     }
 
@@ -55,16 +59,21 @@ contract multiowned {
 	// METHODS
 
     // constructor is given number of sigs required to do protected "onlymanyowners" transactions
-    // as well as the selection of addresses capable of confirming them.
-    function multiowned(address[] _owners, uint _required) {
-        m_numOwners = _owners.length + 1;
+    // as well as the selection of extra addresses capable of confirming them (msg.sender also added to owners).
+    function multiowned(address[] _extraOwners, uint _required) {
+        m_numOwners = _extraOwners.length + 1;
+        require(m_numOwners <= c_maxOwners);
+        require(_required > 0 && _required <= m_numOwners);
+
         m_owners[1] = uint(msg.sender);
         m_ownerIndex[uint(msg.sender)] = 1;
-        for (uint i = 0; i < _owners.length; ++i)
+        for (uint i = 0; i < _extraOwners.length; ++i)
         {
-            m_owners[2 + i] = uint(_owners[i]);
-            m_ownerIndex[uint(_owners[i])] = 2 + i;
+            m_owners[2 + i] = uint(_extraOwners[i]);
+            m_ownerIndex[uint(_extraOwners[i])] = 2 + i;
         }
+        assertOwnersAreConsistent();
+
         m_required = _required;
     }
 
@@ -83,58 +92,79 @@ contract multiowned {
     }
 
     // Replaces an owner `_from` with another `_to`.
+    // All pending operations will be canceled!
     function changeOwner(address _from, address _to) onlymanyowners(sha3(msg.data)) external {
-        if (isOwner(_to)) return;
-        uint ownerIndex = m_ownerIndex[uint(_from)];
-        if (ownerIndex == 0) return;
+        require(isOwner(_from) && !isOwner(_to));   // this usage error should be noticed by the caller
+
+        assertOwnersAreConsistent();
 
         clearPending();
+        uint ownerIndex = m_ownerIndex[uint(_from)];
         m_owners[ownerIndex] = uint(_to);
         m_ownerIndex[uint(_from)] = 0;
         m_ownerIndex[uint(_to)] = ownerIndex;
+
+        assertOwnersAreConsistent();
         OwnerChanged(_from, _to);
     }
 
+    // All pending operations will be canceled!
     function addOwner(address _owner) onlymanyowners(sha3(msg.data)) external {
-        if (isOwner(_owner)) return;
+        require(! isOwner(_owner));     // this usage error should be noticed by the caller
+        require(m_numOwners < c_maxOwners);
+
+        assertOwnersAreConsistent();
 
         clearPending();
-        if (m_numOwners >= c_maxOwners)
-            reorganizeOwners();
-        if (m_numOwners >= c_maxOwners)
-            return;
         m_numOwners++;
         m_owners[m_numOwners] = uint(_owner);
         m_ownerIndex[uint(_owner)] = m_numOwners;
+
+        assertOwnersAreConsistent();
         OwnerAdded(_owner);
     }
 
+    // All pending operations will be canceled!
     function removeOwner(address _owner) onlymanyowners(sha3(msg.data)) external {
-        uint ownerIndex = m_ownerIndex[uint(_owner)];
-        if (ownerIndex == 0) return;
-        if (m_required > m_numOwners - 1) return;
+        require(isOwner(_owner));   // this usage error should be noticed by the caller
+        require(m_numOwners > 1);   // wont remove the last owner
+        require(m_required <= m_numOwners - 1);
 
+        assertOwnersAreConsistent();
+
+        clearPending();
+        uint ownerIndex = m_ownerIndex[uint(_owner)];
         m_owners[ownerIndex] = 0;
         m_ownerIndex[uint(_owner)] = 0;
-        clearPending();
-        reorganizeOwners(); //make sure m_numOwner is equal to the number of owners and always points to the optimal free slot
+        //make sure m_numOwners is equal to the number of owners and always points to the last owner
+        reorganizeOwners();
+
+        assertOwnersAreConsistent();
         OwnerRemoved(_owner);
     }
 
+    // All pending operations will be canceled!
     function changeRequirement(uint _newRequired) onlymanyowners(sha3(msg.data)) external {
-        if (_newRequired > m_numOwners) return;
+        require(_newRequired > 0 && _newRequired <= m_numOwners);
         m_required = _newRequired;
         clearPending();
         RequirementChanged(_newRequired);
     }
 
-    // Gets an owner by 0-indexed position (using numOwners as the count)
+    // Gets an owner by 0-indexed position
     function getOwner(uint ownerIndex) external constant returns (address) {
         return address(m_owners[ownerIndex + 1]);
     }
 
-    function isOwner(address _addr) returns (bool) {
+    function isOwner(address _addr) constant returns (bool) {
         return m_ownerIndex[uint(_addr)] > 0;
+    }
+
+    // Tests ownership of the current caller.
+    // It's advisable to call it by new owner to make sure that the same erroneous address is not copy-pasted to
+    // addOwner/changeOwner and to isOwner.
+    function amIOwner() constant onlyowner returns (bool) {
+        return true;
     }
 
     function hasConfirmed(bytes32 _operation, address _owner) constant returns (bool) {
@@ -188,14 +218,22 @@ contract multiowned {
         }
     }
 
+    // Reclaims free slots between valid owners in m_owners.
+    // TODO given that its called after each removal, it could be simplified.
     function reorganizeOwners() private {
         uint free = 1;
         while (free < m_numOwners)
         {
+            // iterating to the first free slot from the beginning
             while (free < m_numOwners && m_owners[free] != 0) free++;
+
+            // iterating to the first occupied slot from the end
             while (m_numOwners > 1 && m_owners[m_numOwners] == 0) m_numOwners--;
+
+            // swap, if possible, so free slot is located at the end after the swap
             if (free < m_numOwners && m_owners[m_numOwners] != 0 && m_owners[free] == 0)
             {
+                // owners between swapped slots should't be renumbered - that saves a lot of gas
                 m_owners[free] = m_owners[m_numOwners];
                 m_ownerIndex[m_owners[free]] = free;
                 m_owners[m_numOwners] = 0;
@@ -211,18 +249,34 @@ contract multiowned {
         delete m_pendingIndex;
     }
 
+    function assertOwnersAreConsistent() private constant {
+        assert(m_numOwners > 0);
+        assert(m_numOwners <= c_maxOwners);
+        assert(m_owners[0] == 0);
+        assert(0 != m_required && m_required <= m_numOwners);
+    }
+
+
    	// FIELDS
+
+    uint constant c_maxOwners = 250;
 
     // the number of owners that must confirm the same operation before it is run.
     uint public m_required;
+
+
     // pointer used to find a free slot in m_owners
     uint public m_numOwners;
 
-    // list of owners
+    // list of owners (addresses),
+    // slot 0 is unused so there are no owner which index is 0.
+    // TODO could we save space at the end of the array for the common case of <10 owners? and should we?
     uint[256] m_owners;
-    uint constant c_maxOwners = 250;
-    // index on the list of owners to allow reverse lookup
+
+    // index on the list of owners to allow reverse lookup: owner address => index in m_owners
     mapping(uint => uint) m_ownerIndex;
+
+
     // the ongoing operations.
     mapping(bytes32 => PendingState) m_pending;
     bytes32[] m_pendingIndex;
