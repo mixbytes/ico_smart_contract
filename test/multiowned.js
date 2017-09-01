@@ -139,7 +139,7 @@ contract('multiowned', function(accounts) {
         await expectThrow(instance.changeRequirement(4, {from: accounts[0]}));
 
         await instance.changeRequirement(3, {from: accounts[0]});
-        assert.equal(await instance.m_required(), 3);
+        assert.equal(await instance.m_multiOwnedRequired(), 3);
     });
 
     it("revoke check", async function() {

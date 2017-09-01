@@ -17,14 +17,14 @@ contract multiowned {
 	// TYPES
 
     // struct for the status of a pending operation.
-    struct PendingState {
+    struct MultiOwnedOperationPendingState {
         // count of confirmations needed
         uint yetNeeded;
 
         // bitmap of confirmations where owner #ownerIndex's decision corresponds to 2**ownerIndex bit
         uint ownersDone;
 
-        // position of this operation key in m_pendingIndex
+        // position of this operation key in m_multiOwnedPendingIndex
         uint index;
     }
 
@@ -65,7 +65,7 @@ contract multiowned {
         _;
     }
 
-    modifier validRequirement(uint _required, uint _numOwners) {
+    modifier multiOwnedValidRequirement(uint _required, uint _numOwners) {
         require(_required > 0 && _required <= _numOwners);
         _;
     }
@@ -80,7 +80,7 @@ contract multiowned {
         _;
     }
 
-    modifier operationIsActive(bytes32 _operation) {
+    modifier multiOwnedOperationIsActive(bytes32 _operation) {
         require(isOperationActive(_operation));
         _;
     }
@@ -91,12 +91,12 @@ contract multiowned {
     // as well as the selection of extra addresses capable of confirming them (msg.sender also added to owners).
     function multiowned(address[] _extraOwners, uint _required)
         validNumOwners(_extraOwners.length + 1)
-        validRequirement(_required, _extraOwners.length + 1)
+        multiOwnedValidRequirement(_required, _extraOwners.length + 1)
     {
         assert(c_maxOwners <= 255);
 
         m_numOwners = _extraOwners.length + 1;
-        m_required = _required;
+        m_multiOwnedRequired = _required;
 
         m_owners[1] = msg.sender;
         m_ownerIndex[msg.sender] = 1;
@@ -156,7 +156,7 @@ contract multiowned {
         external
         ownerExists(_owner)
         validNumOwners(m_numOwners - 1)
-        validRequirement(m_required, m_numOwners - 1)
+        multiOwnedValidRequirement(m_multiOwnedRequired, m_numOwners - 1)
         onlymanyowners(sha3(msg.data))
     {
         assertOwnersAreConsistent();
@@ -175,10 +175,10 @@ contract multiowned {
     // All pending operations will be canceled!
     function changeRequirement(uint _newRequired)
         external
-        validRequirement(_newRequired, m_numOwners)
+        multiOwnedValidRequirement(_newRequired, m_numOwners)
         onlymanyowners(sha3(msg.data))
     {
-        m_required = _newRequired;
+        m_multiOwnedRequired = _newRequired;
         clearPending();
         RequirementChanged(_newRequired);
     }
@@ -202,11 +202,11 @@ contract multiowned {
     // Revokes a prior confirmation of the given operation
     function revoke(bytes32 _operation)
         external
-        operationIsActive(_operation)
+        multiOwnedOperationIsActive(_operation)
         onlyowner
     {
         uint ownerIndexBit = makeOwnerBitmapBit(msg.sender);
-        var pending = m_pending[_operation];
+        var pending = m_multiOwnedPending[_operation];
         require(pending.ownersDone & ownerIndexBit > 0);
 
         assertOperationIsConsistent(_operation);
@@ -221,11 +221,11 @@ contract multiowned {
     function hasConfirmed(bytes32 _operation, address _owner)
         external
         constant
-        operationIsActive(_operation)
+        multiOwnedOperationIsActive(_operation)
         ownerExists(_owner)
         returns (bool)
     {
-        return !(m_pending[_operation].ownersDone & makeOwnerBitmapBit(_owner) == 0);
+        return !(m_multiOwnedPending[_operation].ownersDone & makeOwnerBitmapBit(_owner) == 0);
     }
 
     // INTERNAL METHODS
@@ -235,16 +235,16 @@ contract multiowned {
         onlyowner
         returns (bool)
     {
-        var pending = m_pending[_operation];
+        var pending = m_multiOwnedPending[_operation];
 
         // if we're not yet working on this operation, switch over and reset the confirmation status.
         if (! isOperationActive(_operation)) {
             // reset count of confirmations needed.
-            pending.yetNeeded = m_required;
+            pending.yetNeeded = m_multiOwnedRequired;
             // reset which owners have confirmed (none) - set our bitmap to 0.
             pending.ownersDone = 0;
-            pending.index = m_pendingIndex.length++;
-            m_pendingIndex[pending.index] = _operation;
+            pending.index = m_multiOwnedPendingIndex.length++;
+            m_multiOwnedPendingIndex[pending.index] = _operation;
             assertOperationIsConsistent(_operation);
         }
 
@@ -257,8 +257,8 @@ contract multiowned {
             assert(pending.yetNeeded > 0);
             if (pending.yetNeeded == 1) {
                 // enough confirmations: reset and run interior.
-                delete m_pendingIndex[m_pending[_operation].index];
-                delete m_pending[_operation];
+                delete m_multiOwnedPendingIndex[m_multiOwnedPending[_operation].index];
+                delete m_multiOwnedPending[_operation];
                 return true;
             }
             else
@@ -294,12 +294,12 @@ contract multiowned {
         }
     }
 
-    function clearPending() internal {
-        uint length = m_pendingIndex.length;
+    function clearPending() private {
+        uint length = m_multiOwnedPendingIndex.length;
         for (uint i = 0; i < length; ++i)
-            if (m_pendingIndex[i] != 0)
-                delete m_pending[m_pendingIndex[i]];
-        delete m_pendingIndex;
+            if (m_multiOwnedPendingIndex[i] != 0)
+                delete m_multiOwnedPending[m_multiOwnedPendingIndex[i]];
+        delete m_multiOwnedPendingIndex;
     }
 
     function checkOwnerIndex(uint ownerIndex) private constant returns (uint) {
@@ -313,7 +313,7 @@ contract multiowned {
     }
 
     function isOperationActive(bytes32 _operation) private constant returns (bool) {
-        return 0 != m_pending[_operation].yetNeeded;
+        return 0 != m_multiOwnedPending[_operation].yetNeeded;
     }
 
 
@@ -321,14 +321,14 @@ contract multiowned {
         assert(m_numOwners > 0);
         assert(m_numOwners <= c_maxOwners);
         assert(m_owners[0] == 0);
-        assert(0 != m_required && m_required <= m_numOwners);
+        assert(0 != m_multiOwnedRequired && m_multiOwnedRequired <= m_numOwners);
     }
 
     function assertOperationIsConsistent(bytes32 _operation) private constant {
-        var pending = m_pending[_operation];
+        var pending = m_multiOwnedPending[_operation];
         assert(0 != pending.yetNeeded);
-        assert(m_pendingIndex[pending.index] == _operation);
-        assert(pending.yetNeeded <= m_required);
+        assert(m_multiOwnedPendingIndex[pending.index] == _operation);
+        assert(pending.yetNeeded <= m_multiOwnedRequired);
     }
 
 
@@ -337,7 +337,7 @@ contract multiowned {
     uint constant c_maxOwners = 250;
 
     // the number of owners that must confirm the same operation before it is run.
-    uint public m_required;
+    uint public m_multiOwnedRequired;
 
 
     // pointer used to find a free slot in m_owners
@@ -353,6 +353,6 @@ contract multiowned {
 
 
     // the ongoing operations.
-    mapping(bytes32 => PendingState) m_pending;
-    bytes32[] m_pendingIndex;
+    mapping(bytes32 => MultiOwnedOperationPendingState) m_multiOwnedPending;
+    bytes32[] m_multiOwnedPendingIndex;
 }
