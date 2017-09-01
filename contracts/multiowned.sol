@@ -52,8 +52,12 @@ contract multiowned {
     // that later attempts can be realised as the same underlying operation and
     // thus count as confirmations.
     modifier onlymanyowners(bytes32 _operation) {
-        require(confirmAndCheck(_operation));
-        _;
+        if (confirmAndCheck(_operation)) {
+            _;
+        }
+        // Even if required number of confirmations has't been collected yet,
+        // we can't throw here - because changes to the state have to be preserved.
+        // But, confirmAndCheck itself will throw in case sender is not an owner.
     }
 
 	// METHODS
@@ -72,9 +76,9 @@ contract multiowned {
             m_owners[2 + i] = uint(_extraOwners[i]);
             m_ownerIndex[uint(_extraOwners[i])] = 2 + i;
         }
-        assertOwnersAreConsistent();
-
         m_required = _required;
+
+        assertOwnersAreConsistent();
     }
 
     // Revokes a prior confirmation of the given operation
@@ -185,7 +189,7 @@ contract multiowned {
         // determine what index the present sender is:
         uint ownerIndex = m_ownerIndex[uint(msg.sender)];
         // make sure they're an owner
-        if (ownerIndex == 0) return;
+        require(ownerIndex != 0);
 
         var pending = m_pending[_operation];
         // if we're not yet working on this operation, switch over and reset the confirmation status.
@@ -196,6 +200,7 @@ contract multiowned {
             pending.ownersDone = 0;
             pending.index = m_pendingIndex.length++;
             m_pendingIndex[pending.index] = _operation;
+            assertOperationIsConsistent(_operation);
         }
         // determine the bit to set for this owner.
         uint ownerIndexBit = 2**ownerIndex;
@@ -254,6 +259,12 @@ contract multiowned {
         assert(m_numOwners <= c_maxOwners);
         assert(m_owners[0] == 0);
         assert(0 != m_required && m_required <= m_numOwners);
+    }
+
+    function assertOperationIsConsistent(bytes32 _operation) private constant {
+        var pending = m_pending[_operation];
+        assert(m_pendingIndex[pending.index] == _operation);
+        assert(pending.yetNeeded <= m_required);
     }
 
 
