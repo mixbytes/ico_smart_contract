@@ -10,7 +10,7 @@ const l = console.log;
 contract('multiowned', function(accounts) {
 
     async function freshInstance(required=2) {
-        return multiowned.new([accounts[1], accounts[2]], required, {from: accounts[0]});
+        return multiowned.new([accounts[0], accounts[1], accounts[2]], required, {from: accounts[0]});
     }
 
     function skipHexPrefix(str) {
@@ -44,12 +44,14 @@ contract('multiowned', function(accounts) {
     }
 
     it("ctor check", async function() {
-        await expectThrow(multiowned.new([accounts[1], accounts[2]], 20, {from: accounts[0]}));
+        await expectThrow(multiowned.new([accounts[0], accounts[1], accounts[2]], 20, {from: accounts[0]}));
+        await expectThrow(multiowned.new([accounts[0], accounts[1], accounts[0]], 1, {from: accounts[0]}));
+        await expectThrow(multiowned.new([accounts[0], accounts[1], 0], 1, {from: accounts[0]}));
 
-        let instance = await multiowned.new([], 1, {from: accounts[0]});
+        let instance = await multiowned.new([accounts[0]], 1, {from: accounts[0]});
         assert.deepEqual(await getOwners(instance), [accounts[0]]);
 
-        instance = await multiowned.new([accounts[1]], 2, {from: accounts[0]});
+        instance = await multiowned.new([accounts[0], accounts[1]], 2, {from: accounts[0]});
         assert.deepEqual(await getOwners(instance), [accounts[0], accounts[1]]);
 
         instance = await freshInstance();

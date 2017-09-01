@@ -88,26 +88,25 @@ contract multiowned {
 	// METHODS
 
     // constructor is given number of sigs required to do protected "onlymanyowners" transactions
-    // as well as the selection of extra addresses capable of confirming them (msg.sender also added to owners).
-    function multiowned(address[] _extraOwners, uint _required)
-        validNumOwners(_extraOwners.length + 1)
-        multiOwnedValidRequirement(_required, _extraOwners.length + 1)
+    // as well as the selection of addresses capable of confirming them (msg.sender is not added to the owners!).
+    function multiowned(address[] _owners, uint _required)
+        validNumOwners(_owners.length)
+        multiOwnedValidRequirement(_required, _owners.length)
     {
         assert(c_maxOwners <= 255);
 
-        m_numOwners = _extraOwners.length + 1;
+        m_numOwners = _owners.length;
         m_multiOwnedRequired = _required;
 
-        m_owners[1] = msg.sender;
-        m_ownerIndex[msg.sender] = 1;
-        for (uint i = 0; i < _extraOwners.length; ++i)
+        for (uint i = 0; i < _owners.length; ++i)
         {
-            uint currentOwnerIndex = checkOwnerIndex(
-                i
-                + 1 /* first slot is unused */
-                + 1 /* first owner is msg.sender */);
-            m_owners[currentOwnerIndex] = _extraOwners[i];
-            m_ownerIndex[_extraOwners[i]] = currentOwnerIndex;
+            address owner = _owners[i];
+            // invalid and duplicate addresses are not allowed
+            require(0 != owner && !isOwner(owner) /* not isOwner yet! */);
+
+            uint currentOwnerIndex = checkOwnerIndex(i + 1 /* first slot is unused */);
+            m_owners[currentOwnerIndex] = owner;
+            m_ownerIndex[owner] = currentOwnerIndex;
         }
 
         assertOwnersAreConsistent();
