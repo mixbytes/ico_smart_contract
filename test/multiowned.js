@@ -13,6 +13,28 @@ contract('multiowned', function(accounts) {
         return multiowned.new([accounts[1], accounts[2]], required, {from: accounts[0]});
     }
 
+    function skipHexPrefix(str) {
+        return str.match(/^0[xX]/) ? str.substring(2) : str;
+    }
+    function paddedArg(str) {
+        // pad to bytes32
+        return str.padStart(64, '0');
+    }
+
+    const changeOwnerSelector = skipHexPrefix(web3.sha3('changeOwner(address,address)')).substring(0, 8);
+    // Make calldata for changeOwner function and get its hash, which is used as an operation key
+    function makeChangeOwnerOpHash(_from, _to) {
+        /* requires web3 1.0+
+        web3.eth.abi.encodeFunctionCall({"constant":false,
+            "inputs":[{"name":"_from","type":"address"},{"name":"_to","type":"address"}],
+            "name":"changeOwner",
+            "outputs":[],
+            "payable":false,"stateMutability":"nonpayable","type":"function"
+        }, [accounts[1], accounts[3]]); */
+
+        return web3.sha3(changeOwnerSelector + paddedArg(skipHexPrefix(_from)) + paddedArg(skipHexPrefix(_to)), {encoding: 'hex'});
+    }
+
     async function getOwners(instance) {
         const totalOwners = (await instance.m_numOwners()).toNumber();
         const calls = [];
@@ -118,6 +140,69 @@ contract('multiowned', function(accounts) {
 
         await instance.changeRequirement(3, {from: accounts[0]});
         assert.equal(await instance.m_required(), 3);
+    });
+
+    it("revoke check", async function() {
+        const instance = await freshInstance();
+
+        // first signature
+        await instance.changeOwner(accounts[1], accounts[3], {from: accounts[0]});
+        assert.deepEqual(await getOwners(instance), [accounts[0], accounts[1], accounts[2]],
+            'owners are the same');
+
+        const opHash = makeChangeOwnerOpHash(accounts[1], accounts[3]);
+        assert(await instance.hasConfirmed(opHash, accounts[0]));
+        assert(! await instance.hasConfirmed(opHash, accounts[2]));
+
+        await expectThrow(instance.revoke(opHash, {from: accounts[3]}));
+
+        await instance.revoke(opHash, {from: accounts[0]});
+        assert.deepEqual(await getOwners(instance), [accounts[0], accounts[1], accounts[2]],
+            'owners are the same');
+        assert(! await instance.hasConfirmed(opHash, accounts[0]));
+        assert(! await instance.hasConfirmed(opHash, accounts[2]));
+
+        // second signature (but first was revoked!)
+        await instance.changeOwner(accounts[1], accounts[3], {from: accounts[2]});
+        assert.deepEqual(await getOwners(instance), [accounts[0], accounts[1], accounts[2]],
+            'owners are the same');
+        assert(! await instance.hasConfirmed(opHash, accounts[0]));
+        assert(await instance.hasConfirmed(opHash, accounts[2]));
+    });
+
+    it("complex (3 sigs required) check", async function() {
+        const instance = await freshInstance(3);
+        const opHash = makeChangeOwnerOpHash(accounts[1], accounts[3]);
+
+        // first signature
+        await instance.changeOwner(accounts[1], accounts[3], {from: accounts[0]});
+        assert.deepEqual(await getOwners(instance), [accounts[0], accounts[1], accounts[2]],
+            'owners are the same');
+
+        await instance.changeOwner(accounts[1], accounts[3], {from: accounts[1]});
+
+        assert(await instance.hasConfirmed(opHash, accounts[0]));
+        assert(await instance.hasConfirmed(opHash, accounts[1]));
+        assert(! await instance.hasConfirmed(opHash, accounts[2]));
+
+        await instance.revoke(opHash, {from: accounts[0]});
+        assert.deepEqual(await getOwners(instance), [accounts[0], accounts[1], accounts[2]],
+            'owners are the same');
+        assert(! await instance.hasConfirmed(opHash, accounts[0]));
+        assert(await instance.hasConfirmed(opHash, accounts[1]));
+        assert(! await instance.hasConfirmed(opHash, accounts[2]));
+
+        // second signature (but first was revoked!)
+        await instance.changeOwner(accounts[1], accounts[3], {from: accounts[2]});
+        assert.deepEqual(await getOwners(instance), [accounts[0], accounts[1], accounts[2]],
+            'owners are the same');
+        assert(! await instance.hasConfirmed(opHash, accounts[0]));
+        assert(await instance.hasConfirmed(opHash, accounts[1]));
+        assert(await instance.hasConfirmed(opHash, accounts[2]));
+
+        // finally changing owner
+        await instance.changeOwner(accounts[1], accounts[3], {from: accounts[0]});
+        assert.deepEqual(await getOwners(instance), [accounts[0], accounts[3], accounts[2]]);
     });
 
 });

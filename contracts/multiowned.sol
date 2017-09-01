@@ -165,8 +165,12 @@ contract multiowned {
         uint ownerIndexBit = 2**ownerIndex;
         var pending = m_pending[_operation];
         if (pending.ownersDone & ownerIndexBit > 0) {
+            assertOperationIsConsistent(_operation);
+
             pending.yetNeeded++;
             pending.ownersDone -= ownerIndexBit;
+
+            assertOperationIsConsistent(_operation);
             Revoke(msg.sender, _operation);
         }
     }
@@ -208,7 +212,8 @@ contract multiowned {
         if (pending.ownersDone & ownerIndexBit == 0) {
             Confirmation(msg.sender, _operation);
             // ok - check if count is enough to go ahead.
-            if (pending.yetNeeded <= 1) {
+            assert(pending.yetNeeded > 0);
+            if (pending.yetNeeded == 1) {
                 // enough confirmations: reset and run interior.
                 delete m_pendingIndex[m_pending[_operation].index];
                 delete m_pending[_operation];
@@ -219,6 +224,7 @@ contract multiowned {
                 // not enough: record that this owner in particular confirmed.
                 pending.yetNeeded--;
                 pending.ownersDone |= ownerIndexBit;
+                assertOperationIsConsistent(_operation);
             }
         }
     }
@@ -263,6 +269,7 @@ contract multiowned {
 
     function assertOperationIsConsistent(bytes32 _operation) private constant {
         var pending = m_pending[_operation];
+        assert(0 != pending.yetNeeded);
         assert(m_pendingIndex[pending.index] == _operation);
         assert(pending.yetNeeded <= m_required);
     }
