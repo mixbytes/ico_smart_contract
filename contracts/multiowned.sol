@@ -10,8 +10,9 @@
 // some number (specified in constructor) of the set of owners (specified in the constructor, modifiable) before the
 // interior is executed.
 
-pragma solidity ^0.4.10;
+pragma solidity 0.4.15;
 
+// TODO acceptOwnership
 contract multiowned {
 
 	// TYPES
@@ -187,7 +188,7 @@ contract multiowned {
         return m_owners[ownerIndex + 1];
     }
 
-    function isOwner(address _addr) constant returns (bool) {
+    function isOwner(address _addr) public constant returns (bool) {
         return m_ownerIndex[_addr] > 0;
     }
 
@@ -238,6 +239,10 @@ contract multiowned {
 
         // if we're not yet working on this operation, switch over and reset the confirmation status.
         if (! isOperationActive(_operation)) {
+            if (512 == m_multiOwnedPendingIndex.length)
+                // TODO use more graceful approach like compact or removal of clearPending completely
+                clearPending();
+
             // reset count of confirmations needed.
             pending.yetNeeded = m_multiOwnedRequired;
             // reset which owners have confirmed (none) - set our bitmap to 0.
@@ -293,11 +298,12 @@ contract multiowned {
         }
     }
 
-    function clearPending() private {
+    function clearPending() private onlyowner {
         uint length = m_multiOwnedPendingIndex.length;
-        for (uint i = 0; i < length; ++i)
+        for (uint i = 0; i < length; ++i) {
             if (m_multiOwnedPendingIndex[i] != 0)
                 delete m_multiOwnedPending[m_multiOwnedPendingIndex[i]];
+        }
         delete m_multiOwnedPendingIndex;
     }
 
@@ -345,13 +351,13 @@ contract multiowned {
     // list of owners (addresses),
     // slot 0 is unused so there are no owner which index is 0.
     // TODO could we save space at the end of the array for the common case of <10 owners? and should we?
-    address[256] m_owners;
+    address[256] internal m_owners;
 
     // index on the list of owners to allow reverse lookup: owner address => index in m_owners
-    mapping(address => uint) m_ownerIndex;
+    mapping(address => uint) internal m_ownerIndex;
 
 
     // the ongoing operations.
-    mapping(bytes32 => MultiOwnedOperationPendingState) m_multiOwnedPending;
-    bytes32[] m_multiOwnedPendingIndex;
+    mapping(bytes32 => MultiOwnedOperationPendingState) internal m_multiOwnedPending;
+    bytes32[] internal m_multiOwnedPendingIndex;
 }
