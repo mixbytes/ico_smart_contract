@@ -240,6 +240,9 @@ contract multiowned {
         // if we're not yet working on this operation, switch over and reset the confirmation status.
         if (! isOperationActive(_operation)) {
             if (512 == m_multiOwnedPendingIndex.length)
+                // In case m_multiOwnedPendingIndex grows too much we have to shrink it: otherwise at some point
+                // we won't be able to do it because of block gas limit.
+                // Yes, pending confirmations will be lost. Dont see any security or stability implications.
                 // TODO use more graceful approach like compact or removal of clearPending completely
                 clearPending();
 
