@@ -98,16 +98,16 @@ contract multiowned {
         m_numOwners = _extraOwners.length + 1;
         m_required = _required;
 
-        m_owners[1] = uint(msg.sender);
-        m_ownerIndex[uint(msg.sender)] = 1;
+        m_owners[1] = msg.sender;
+        m_ownerIndex[msg.sender] = 1;
         for (uint i = 0; i < _extraOwners.length; ++i)
         {
             uint currentOwnerIndex = checkOwnerIndex(
                 i
                 + 1 /* first slot is unused */
                 + 1 /* first owner is msg.sender */);
-            m_owners[currentOwnerIndex] = uint(_extraOwners[i]);
-            m_ownerIndex[uint(_extraOwners[i])] = currentOwnerIndex;
+            m_owners[currentOwnerIndex] = _extraOwners[i];
+            m_ownerIndex[_extraOwners[i]] = currentOwnerIndex;
         }
 
         assertOwnersAreConsistent();
@@ -124,10 +124,10 @@ contract multiowned {
         assertOwnersAreConsistent();
 
         clearPending();
-        uint ownerIndex = checkOwnerIndex(m_ownerIndex[uint(_from)]);
-        m_owners[ownerIndex] = uint(_to);
-        m_ownerIndex[uint(_from)] = 0;
-        m_ownerIndex[uint(_to)] = ownerIndex;
+        uint ownerIndex = checkOwnerIndex(m_ownerIndex[_from]);
+        m_owners[ownerIndex] = _to;
+        m_ownerIndex[_from] = 0;
+        m_ownerIndex[_to] = ownerIndex;
 
         assertOwnersAreConsistent();
         OwnerChanged(_from, _to);
@@ -144,8 +144,8 @@ contract multiowned {
 
         clearPending();
         m_numOwners++;
-        m_owners[m_numOwners] = uint(_owner);
-        m_ownerIndex[uint(_owner)] = checkOwnerIndex(m_numOwners);
+        m_owners[m_numOwners] = _owner;
+        m_ownerIndex[_owner] = checkOwnerIndex(m_numOwners);
 
         assertOwnersAreConsistent();
         OwnerAdded(_owner);
@@ -162,9 +162,9 @@ contract multiowned {
         assertOwnersAreConsistent();
 
         clearPending();
-        uint ownerIndex = m_ownerIndex[uint(_owner)];
+        uint ownerIndex = checkOwnerIndex(m_ownerIndex[_owner]);
         m_owners[ownerIndex] = 0;
-        m_ownerIndex[uint(_owner)] = 0;
+        m_ownerIndex[_owner] = 0;
         //make sure m_numOwners is equal to the number of owners and always points to the last owner
         reorganizeOwners();
 
@@ -185,11 +185,11 @@ contract multiowned {
 
     // Gets an owner by 0-indexed position
     function getOwner(uint ownerIndex) external constant returns (address) {
-        return address(m_owners[checkOwnerIndex(ownerIndex + 1)]);
+        return m_owners[ownerIndex + 1];
     }
 
     function isOwner(address _addr) constant returns (bool) {
-        return m_ownerIndex[uint(_addr)] > 0;
+        return m_ownerIndex[_addr] > 0;
     }
 
     // Tests ownership of the current caller.
@@ -308,7 +308,7 @@ contract multiowned {
     }
 
     function makeOwnerBitmapBit(address owner) private constant returns (uint) {
-        uint ownerIndex = checkOwnerIndex(m_ownerIndex[uint(owner)]);
+        uint ownerIndex = checkOwnerIndex(m_ownerIndex[owner]);
         return 2 ** ownerIndex;
     }
 
@@ -346,10 +346,10 @@ contract multiowned {
     // list of owners (addresses),
     // slot 0 is unused so there are no owner which index is 0.
     // TODO could we save space at the end of the array for the common case of <10 owners? and should we?
-    uint[256] m_owners;
+    address[256] m_owners;
 
     // index on the list of owners to allow reverse lookup: owner address => index in m_owners
-    mapping(uint => uint) m_ownerIndex;
+    mapping(address => uint) m_ownerIndex;
 
 
     // the ongoing operations.
