@@ -184,7 +184,7 @@ contract multiowned {
     }
 
     // Gets an owner by 0-indexed position
-    function getOwner(uint ownerIndex) external constant returns (address) {
+    function getOwner(uint ownerIndex) public constant returns (address) {
         return m_owners[ownerIndex + 1];
     }
 

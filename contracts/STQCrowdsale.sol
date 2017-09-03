@@ -21,7 +21,6 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
 
 
     event StateChanged(IcoState indexed _state);
-    event EtherSent(address indexed to, uint value);
 
 
     modifier requiresState(IcoState _state) {
@@ -132,7 +131,7 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
         onlymanyowners(sha3(msg.data))
     {
         changeState(IcoState.ICO);
-        tick();
+        checkTime();
     }
 
     /// @notice consider paused ICO as failed
@@ -168,7 +167,7 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
     }
 
     /// @notice explicit trigger for timed state changes
-    function tick()
+    function checkTime()
         public
         timedStateChange
         onlyowner
@@ -178,7 +177,12 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
 
     // INTERNAL functions
 
-    function finishICO() private; // FIXME
+    function finishICO() private {
+        if (m_funds.totalInvested() < c_MinFunds)
+            changeState(IcoState.FAILED);
+        else
+            changeState(IcoState.SUCCEEDED);
+    }
 
     /// @dev performs only allowed state transitions
     function changeState(IcoState _newState) private {
@@ -191,17 +195,27 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
 
         m_state = _newState;
         // this should be tightly linked
-        if (IcoState.SUCCEEDED == m_state)
-        {
-            m_funds.changeState(FundsRegistry.State.SUCCEEDED);
-            m_token.startCirculation();
-        }
-        else if (IcoState.FAILED == m_state)
-        {
-            m_funds.changeState(FundsRegistry.State.REFUNDING);
+        if (IcoState.SUCCEEDED == m_state) {
+            onSuccess();
+        } else if (IcoState.FAILED == m_state) {
+            onFailure();
         }
 
         StateChanged(m_state);
+    }
+
+    function onSuccess() private {
+        // mint tokens for owners
+        uint tokensPerOwner = m_token.totalSupply().mul(4).div(m_numOwners);
+        for (uint i = 0; i < m_numOwners; i++)
+            m_token.mint(getOwner(i), tokensPerOwner);
+
+        m_funds.changeState(FundsRegistry.State.SUCCEEDED);
+        m_token.startCirculation();
+    }
+
+    function onFailure() private {
+        m_funds.changeState(FundsRegistry.State.REFUNDING);
     }
 
 
