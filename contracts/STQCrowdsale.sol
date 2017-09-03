@@ -2,6 +2,7 @@ pragma solidity 0.4.15;
 
 import './ownership/multiowned.sol';
 import './crowdsale/FixedTimeBonuses.sol';
+import './crowdsale/FundsRegistry.sol';
 import './STQToken.sol';
 
 
@@ -41,6 +42,7 @@ contract STQCrowdsale is multiowned {
     {
         require(3 == _owners.length);
         m_token = new STQToken(_owners);
+        m_funds = new FundsRegistry(_owners, 2, this);
 
         m_bonuses.bonuses.push(FixedTimeBonuses.Bonus({endTime: 1505768399 + MSK2UTC_DELTA, bonus: 25}));
         m_bonuses.bonuses.push(FixedTimeBonuses.Bonus({endTime: 1505941199 + MSK2UTC_DELTA, bonus: 20}));
@@ -149,12 +151,25 @@ contract STQCrowdsale is multiowned {
 
     /// @dev performs only allowed state transitions
     function changeState(IcoState _newState) private {
+        assert(m_state != _newState);
+
         if (IcoState.INIT == m_state) {        assert(IcoState.ICO == _newState); }
         else if (IcoState.ICO == m_state) {    assert(IcoState.PAUSED == _newState || IcoState.FAILED == _newState || IcoState.SUCCEEDED == _newState); }
         else if (IcoState.PAUSED == m_state) { assert(IcoState.ICO == _newState || IcoState.FAILED == _newState); }
         else assert(false);
 
         m_state = _newState;
+        // this should be tightly linked
+        if (IcoState.SUCCEEDED == m_state)
+        {
+            m_funds.changeState(FundsRegistry.State.SUCCEEDED);
+            m_token.startCirculation();
+        }
+        else if (IcoState.FAILED == m_state)
+        {
+            m_funds.changeState(FundsRegistry.State.REFUNDING);
+        }
+
         StateChanged(m_state);
     }
 
@@ -184,9 +199,12 @@ contract STQCrowdsale is multiowned {
     /// @notice timed bonuses
     FixedTimeBonuses.Data m_bonuses;
 
-    /// @notice state of the ICO
+    /// @dev state of the ICO
     IcoState public m_state = IcoState.INIT;
 
-    /// @notice contract responsible for token accounting
+    /// @dev contract responsible for token accounting
     STQToken public m_token;
+
+    /// @dev contract responsible for investments accounting
+    FundsRegistry public m_funds;
 }

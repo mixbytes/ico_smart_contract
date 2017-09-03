@@ -16,7 +16,7 @@ contract STQToken is CirculatingToken, MintableMultiownedToken {
         require(3 == _owners.length);
     }
 
-    function startCirculation() external onlyMinter {
+    function startCirculation() external onlyController {
         assert(enableCirculation());    // must be called once
     }
 
