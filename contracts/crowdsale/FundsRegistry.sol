@@ -107,7 +107,7 @@ contract FundsRegistry is MultiownedControlled {
 
     // FIELDS
 
-    /// @notice total amount of investments
+    /// @notice total amount of investments in wei
     uint256 public totalInvested;
 
     /// @notice state of the registry

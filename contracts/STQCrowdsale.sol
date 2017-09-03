@@ -4,10 +4,15 @@ import './ownership/multiowned.sol';
 import './crowdsale/FixedTimeBonuses.sol';
 import './crowdsale/FundsRegistry.sol';
 import './STQToken.sol';
+import 'zeppelin-solidity/contracts/ReentrancyGuard.sol';
+import 'zeppelin-solidity/contracts/math/Math.sol';
+import 'zeppelin-solidity/contracts/math/SafeMath.sol';
 
 
 /// @title Storiqa ICO contract
-contract STQCrowdsale is multiowned {
+contract STQCrowdsale is multiowned, ReentrancyGuard {
+    using Math for uint256;
+    using SafeMath for uint256;
     using FixedTimeBonuses for FixedTimeBonuses.Data;
 
     uint internal constant MSK2UTC_DELTA = 3600 * 3;
@@ -58,7 +63,7 @@ contract STQCrowdsale is multiowned {
 
     // fallback function as a shortcut
     function() payable {
-        buy();
+        buy();  // only internal call here!
     }
 
     /// @notice ICO participation
@@ -68,31 +73,46 @@ contract STQCrowdsale is multiowned {
         payable
         timedStateChange
         requiresState(IcoState.ICO)
+        nonReentrant
         returns (uint)
     {
-        assert(false);  // FIXME checks
+        address investor = msg.sender;
+        uint256 payment = msg.value;
+        require(payment > 0);
 
-        uint stq = calcSTQAmount(msg.value);
-        m_token.mint(msg.sender, stq);
+        uint startingInvariant = this.balance.add(m_funds.balance);
+
+        // checking for max cap
+        uint fundsAllowed = c_MaximumFunds.sub(m_funds.totalInvested());
+        assert(0 != fundsAllowed);  // in this case state must not be IcoState.ICO
+        payment = fundsAllowed.min256(payment);
+        uint256 change = msg.value.sub(payment);
+
+        // issue tokens
+        uint stq = calcSTQAmount(payment);
+        m_token.mint(investor, stq);
+
+        // record payment
+        m_funds.invested.value(payment)(investor);
+
+        // check if ICO must be closed early
+        if (change > 0)
+        {
+            assert(c_MaximumFunds == m_funds.totalInvested());
+            finishICO();
+
+            // send change
+            investor.transfer(change);
+            assert(startingInvariant == this.balance.add(m_funds.balance).sub(change));
+        }
+        else
+            assert(startingInvariant == this.balance.add(m_funds.balance));
 
         return stq;
     }
 
 
     // PUBLIC interface: owners: maintenance
-
-    /// @notice Send `value` of collected ether to address `to`
-    function sendEther(address to, uint value)
-        external
-        timedStateChange
-        requiresState(IcoState.SUCCEEDED)
-        onlymanyowners(sha3(msg.data))
-    {
-        require(0 != to);
-        require(value > 0 && this.balance >= value);
-        to.transfer(value);
-        EtherSent(to, value);
-    }
 
     /// @notice pauses ICO
     function pause()
@@ -136,6 +156,17 @@ contract STQCrowdsale is multiowned {
         m_token = STQToken(_token);
     }
 
+    /// @notice In case we need to attach to existent funds
+    function setFundsRegistry(address _funds)
+        external
+        timedStateChange
+        requiresState(IcoState.PAUSED)
+        onlymanyowners(sha3(msg.data))
+    {
+        require(0x0 != _funds);
+        m_funds = FundsRegistry(_funds);
+    }
+
     /// @notice explicit trigger for timed state changes
     function tick()
         public
@@ -176,13 +207,17 @@ contract STQCrowdsale is multiowned {
 
     /// @dev calculates amount of STQ to which payer of _wei is entitled
     function calcSTQAmount(uint _wei) private constant returns (uint) {
-        assert(false);  // FIXME
-        m_bonuses.getBonus(now);
+        uint stq = _wei.mul(c_STQperETH);
+
+        // apply bonus
+        stq = stq.mul(m_bonuses.getBonus(now).add(100)).div(100);
+
+        return stq;
     }
 
     /// @dev start time of the ICO, inclusive
     function getStartTime() private constant returns (uint) {
-        return m_startTime;
+        return c_startTime;
     }
 
     /// @dev end time of the ICO, inclusive
@@ -193,8 +228,17 @@ contract STQCrowdsale is multiowned {
 
     // FIELDS
 
+    /// @notice starting exchange rate of STQ
+    uint public constant c_STQperETH = 100;
+
+    /// @notice minimum investments to consider ICO as a success
+    uint public constant c_MinFunds = 3000 ether;
+
+    /// @notice maximum investments to be accepted during ICO
+    uint public constant c_MaximumFunds = 550000 ether;
+
     /// @notice start time of the ICO
-    uint public constant m_startTime = 1505682000 + MSK2UTC_DELTA;
+    uint public constant c_startTime = 1505682000 + MSK2UTC_DELTA;
 
     /// @notice timed bonuses
     FixedTimeBonuses.Data m_bonuses;
