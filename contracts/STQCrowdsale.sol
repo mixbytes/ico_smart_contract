@@ -10,6 +10,7 @@ import 'zeppelin-solidity/contracts/math/SafeMath.sol';
 
 
 /// @title Storiqa ICO contract
+// FIXME WARNING: dont use it, it was't tested and audited yet
 contract STQCrowdsale is multiowned, ReentrancyGuard {
     using Math for uint256;
     using SafeMath for uint256;
@@ -219,10 +220,18 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
 
         m_funds.changeState(FundsRegistry.State.SUCCEEDED);
         m_token.startCirculation();
+
+        // they are no longer linked to the crowdsale
+        m_token.setController(address(0));
+        m_funds.setController(address(0));
     }
 
     function onFailure() private {
         m_funds.changeState(FundsRegistry.State.REFUNDING);
+
+        // they are no longer linked to the crowdsale
+        m_token.setController(address(0));
+        m_funds.setController(address(0));
     }
 
     /// @dev automatic check for unaccounted withdrawals
