@@ -75,6 +75,13 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
         nonReentrant
         returns (uint)
     {
+        // automatic check for unaccounted withdrawals
+        if (maybeAutoPause()) {
+            changeState(IcoState.PAUSED);
+            msg.sender.transfer(msg.value);     // we cant throw (have to save state), so refunding this way
+            return 0;
+        }
+
         address investor = msg.sender;
         uint256 payment = msg.value;
         require(payment > 0);
@@ -218,6 +225,18 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
         m_funds.changeState(FundsRegistry.State.REFUNDING);
     }
 
+    /// @dev automatic check for unaccounted withdrawals
+    function maybeAutoPause() private returns (bool) {
+        if (IcoState.SUCCEEDED == m_state || IcoState.FAILED == m_state)
+            return false;   // expecting withdrawals
+
+        if (m_funds.balance < m_lastFundsAmount)
+            return true;
+
+        m_lastFundsAmount = m_funds.balance;
+        return false;
+    }
+
 
     /// @dev calculates amount of STQ to which payer of _wei is entitled
     function calcSTQAmount(uint _wei) private constant returns (uint) {
@@ -265,4 +284,7 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
 
     /// @dev contract responsible for investments accounting
     FundsRegistry public m_funds;
+
+    /// @dev last recorded funds
+    uint256 public m_lastFundsAmount;
 }
