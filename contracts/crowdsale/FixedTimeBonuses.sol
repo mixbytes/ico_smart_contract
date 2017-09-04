@@ -38,7 +38,7 @@ library FixedTimeBonuses {
     /// @dev validates consistency of data structure
     /// @param self data structure
     /// @param time time for which bonus must be computed (assuming time <= getLastTime())
-    function getBonus(Data storage self, uint time) returns (uint) {
+    function getBonus(Data storage self, uint time) constant returns (uint) {
         // TODO binary search?
         uint length = self.bonuses.length;
         for (uint i = 0; i < length; i++) {
