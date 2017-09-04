@@ -2,7 +2,7 @@
 
 // testrpc has to be run as testrpc -u 0 -u 1 -u 2 -u 3
 
-import expectThrow from './helpers/expectThrow';
+import expectThrow from '../helpers/expectThrow';
 
 const SimpleMultiSigWallet = artifacts.require("./SimpleMultiSigWallet.sol");
 const l = console.log;

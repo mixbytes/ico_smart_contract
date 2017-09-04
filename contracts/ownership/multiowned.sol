@@ -188,6 +188,14 @@ contract multiowned {
         return m_owners[ownerIndex + 1];
     }
 
+    function getOwners() public constant returns (address[]) {
+        address[] memory result = new address[](m_numOwners);
+        for (uint i = 0; i < m_numOwners; i++)
+            result[i] = getOwner(i);
+
+        return result;
+    }
+
     function isOwner(address _addr) public constant returns (bool) {
         return m_ownerIndex[_addr] > 0;
     }

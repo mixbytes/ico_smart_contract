@@ -2,7 +2,7 @@
 
 // testrpc has to be run as testrpc -u 0 -u 1 -u 2 -u 3
 
-import expectThrow from './helpers/expectThrow';
+import expectThrow from '../helpers/expectThrow';
 
 const multiowned = artifacts.require("./multiowned.sol");
 const l = console.log;
@@ -56,6 +56,7 @@ contract('multiowned', function(accounts) {
 
         instance = await freshInstance();
         assert.deepEqual(await getOwners(instance), [accounts[0], accounts[1], accounts[2]]);
+        assert.deepEqual(await instance.getOwners(), [accounts[0], accounts[1], accounts[2]]);
     });
 
     it("changeOwner check", async function() {

@@ -11,7 +11,7 @@ contract STQToken is CirculatingToken, MintableMultiownedToken {
     // PUBLIC interface
 
     function STQToken(address[] _owners)
-        MintableMultiownedToken(_owners, 2, /* minter: */ msg.sender)
+        MintableMultiownedToken(_owners, 2, /* minter: */ address(0))
     {
         require(3 == _owners.length);
     }

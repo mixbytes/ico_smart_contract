@@ -42,12 +42,14 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
 
     // PUBLIC interface
 
-    function STQCrowdsale(address[] _owners)
+    function STQCrowdsale(address[] _owners, address _token, address _funds)
         multiowned(_owners, 2)
     {
         require(3 == _owners.length);
-        m_token = new STQToken(_owners);
-        m_funds = new FundsRegistry(_owners, 2, this);
+        require(address(0) != address(_token) && address(0) != address(_funds));
+
+        m_token = STQToken(_token);
+        m_funds = FundsRegistry(_funds);
 
         m_bonuses.bonuses.push(FixedTimeBonuses.Bonus({endTime: 1505768399 + MSK2UTC_DELTA, bonus: 25}));
         m_bonuses.bonuses.push(FixedTimeBonuses.Bonus({endTime: 1505941199 + MSK2UTC_DELTA, bonus: 20}));
@@ -159,7 +161,7 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
         requiresState(IcoState.PAUSED)
         onlymanyowners(sha3(msg.data))
     {
-        require(0x0 != _token);
+        require(address(0) != _token);
         m_token = STQToken(_token);
     }
 
@@ -170,7 +172,7 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
         requiresState(IcoState.PAUSED)
         onlymanyowners(sha3(msg.data))
     {
-        require(0x0 != _funds);
+        require(address(0) != _funds);
         m_funds = FundsRegistry(_funds);
     }
 
@@ -220,18 +222,10 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
 
         m_funds.changeState(FundsRegistry.State.SUCCEEDED);
         m_token.startCirculation();
-
-        // they are no longer linked to the crowdsale
-        m_token.setController(address(0));
-        m_funds.setController(address(0));
     }
 
     function onFailure() private {
         m_funds.changeState(FundsRegistry.State.REFUNDING);
-
-        // they are no longer linked to the crowdsale
-        m_token.setController(address(0));
-        m_funds.setController(address(0));
     }
 
     /// @dev automatic check for unaccounted withdrawals
