@@ -2,10 +2,11 @@ pragma solidity ^0.4.0;
 
 import '../ownership/MultiownedControlled.sol';
 import 'zeppelin-solidity/contracts/math/SafeMath.sol';
+import 'zeppelin-solidity/contracts/ReentrancyGuard.sol';
 
 
 /// @title registry of funds sent by investors
-contract FundsRegistry is MultiownedControlled {
+contract FundsRegistry is MultiownedControlled, ReentrancyGuard {
     using SafeMath for uint256;
 
     enum State {
@@ -58,8 +59,8 @@ contract FundsRegistry is MultiownedControlled {
         requiresState(State.GATHERING)
     {
         uint256 amount = msg.value;
-        if (0 == amount)
-            return;
+        require(0 != amount);
+        assert(_investor != m_controller);
 
         // register investor
         if (0 == m_weiBalances[_investor])
@@ -88,6 +89,7 @@ contract FundsRegistry is MultiownedControlled {
     function withdrawPayments()
         external
         requiresState(State.REFUNDING)
+        nonReentrant
     {
         address payee = msg.sender;
         uint256 payment = m_weiBalances[payee];
