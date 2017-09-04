@@ -268,10 +268,10 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
     uint public constant c_STQperETH = 100;
 
     /// @notice minimum investments to consider ICO as a success
-    uint public constant c_MinFunds = 3000 ether;
+    uint public constant c_MinFunds = 1000 ether;
 
     /// @notice maximum investments to be accepted during ICO
-    uint public constant c_MaximumFunds = 550000 ether;
+    uint public constant c_MaximumFunds = 500000 ether;
 
     /// @notice start time of the ICO
     uint public constant c_startTime = 1505682000 + MSK2UTC_DELTA;
