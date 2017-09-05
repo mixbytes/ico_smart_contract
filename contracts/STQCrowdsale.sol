@@ -221,11 +221,15 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
             m_token.mint(getOwner(i), tokensPerOwner);
 
         m_funds.changeState(FundsRegistry.State.SUCCEEDED);
+        m_funds.detachController();
+
         m_token.startCirculation();
+        m_token.detachController();
     }
 
     function onFailure() private {
         m_funds.changeState(FundsRegistry.State.REFUNDING);
+        m_funds.detachController();
     }
 
     /// @dev automatic check for unaccounted withdrawals
