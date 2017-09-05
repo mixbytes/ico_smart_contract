@@ -194,6 +194,15 @@ contract('FundsRegistry', function(accounts) {
 
         await checkInvestmentsCantBeMade(instance);
         await checkPaymentsCantBeWithdrawn(instance);
+
+        // testing controller retirement
+        for (let from_ of [role.owner1, role.investor2, role.nobody])
+            await expectThrow(instance.detachController({from: from_}));
+
+        await instance.detachController({from: role.controller});
+
+        for (let from_ of [role.controller, role.owner1, role.investor2, role.nobody])
+            await expectThrow(instance.detachController({from: from_}));
     });
 
     it("test refunding", async function() {
