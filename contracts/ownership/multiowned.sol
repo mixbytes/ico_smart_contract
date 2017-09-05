@@ -33,12 +33,12 @@ contract multiowned {
 
     // this contract only has six types of events: it can accept a confirmation, in which case
     // we record owner and operation (hash) alongside it.
-    event Confirmation(address indexed owner, bytes32 indexed operation);
-    event Revoke(address indexed owner, bytes32 indexed operation);
+    event Confirmation(address owner, bytes32 operation);
+    event Revoke(address owner, bytes32 operation);
     // some others are in the case of an owner changing.
-    event OwnerChanged(address indexed oldOwner, address indexed newOwner);
-    event OwnerAdded(address indexed newOwner);
-    event OwnerRemoved(address indexed oldOwner);
+    event OwnerChanged(address oldOwner, address newOwner);
+    event OwnerAdded(address newOwner);
+    event OwnerRemoved(address oldOwner);
     // the last one is emitted if the required signatures change
     event RequirementChanged(uint newRequirement);
 

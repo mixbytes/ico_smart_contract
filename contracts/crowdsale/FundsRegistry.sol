@@ -18,7 +18,7 @@ contract FundsRegistry is MultiownedControlled, ReentrancyGuard {
         SUCCEEDED
     }
 
-    event StateChanged(State indexed _state);
+    event StateChanged(State _state);
     event Invested(address indexed investor, uint256 amount);
     event EtherSent(address indexed to, uint value);
     event RefundSent(address indexed to, uint value);

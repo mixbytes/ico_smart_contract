@@ -13,7 +13,7 @@ import './multiowned.sol';
  */
 contract MultiownedControlled is multiowned {
 
-    event ControllerSet(address indexed controller);
+    event ControllerSet(address controller);
     event ControllerRetired();
 
 

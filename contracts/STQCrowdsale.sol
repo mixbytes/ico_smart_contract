@@ -21,7 +21,7 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
     enum IcoState { INIT, ICO, PAUSED, FAILED, SUCCEEDED }
 
 
-    event StateChanged(IcoState indexed _state);
+    event StateChanged(IcoState _state);
 
 
     modifier requiresState(IcoState _state) {
