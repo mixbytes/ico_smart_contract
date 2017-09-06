@@ -80,9 +80,12 @@ contract MintableMultiownedToken is MultiownedControlled, StandardToken {
         require(0 != _tokensCreated);
         require(_tokensCreated < totalSupply / 2);  // otherwise it looks like an error
 
+        uint256 totalSupplyWas = totalSupply;
+
+        m_emissions.push(EmissionInfo({created: _tokensCreated, totalSupplyWas: totalSupplyWas}));
         mintInternal(dividendsPool, _tokensCreated);
-        m_emissions.push(EmissionInfo({created: _tokensCreated, totalSupplyWas: totalSupply}));
-        Emission(_tokensCreated, totalSupply, now);
+
+        Emission(_tokensCreated, totalSupplyWas, now);
     }
 
     function mintInternal(address _to, uint256 _amount) internal {
