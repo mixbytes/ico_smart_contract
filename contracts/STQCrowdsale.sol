@@ -31,9 +31,9 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
 
     /// @dev triggers some state changes based on current time
     modifier timedStateChange() {
-        if (IcoState.INIT == m_state && now >= getStartTime())
+        if (IcoState.INIT == m_state && getCurrentTime() >= getStartTime())
             changeState(IcoState.ICO);
-        if (IcoState.ICO == m_state && now > getEndTime())
+        if (IcoState.ICO == m_state && getCurrentTime() > getEndTime())
             finishICO();
 
         _;
@@ -250,7 +250,7 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
         uint stq = _wei.mul(c_STQperETH);
 
         // apply bonus
-        stq = stq.mul(m_bonuses.getBonus(now).add(100)).div(100);
+        stq = stq.mul(m_bonuses.getBonus(getCurrentTime()).add(100)).div(100);
 
         return stq;
     }
@@ -263,6 +263,11 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
     /// @dev end time of the ICO, inclusive
     function getEndTime() private constant returns (uint) {
         return m_bonuses.getLastTime();
+    }
+
+    /// @dev to be overridden in tests
+    function getCurrentTime() internal constant returns (uint) {
+        return now;
     }
 
 
