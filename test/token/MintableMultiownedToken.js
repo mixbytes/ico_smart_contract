@@ -187,6 +187,47 @@ contract('MintableMultiownedTokenTestHelper', function(accounts) {
     });
 
 
+    it("test transferFrom", async function() {
+        const role = getRoles();
+
+        const instance = await MintableMultiownedTokenTestHelper.new([role.owner1, role.owner2], 1, role.minter, {from: role.nobody});
+
+        await instance.mint(role.investor1, web3.toWei(10, 'ether'), {from: role.minter});
+        await instance.mint(role.investor2, web3.toWei(6, 'ether'), {from: role.minter});
+
+        await instance.emission(web3.toWei(6, 'ether'), {from: role.owner1});
+
+        assert.equal(await instance.balanceOf(role.investor1), web3.toWei(10, 'ether'));
+        assert.equal(await instance.balanceOf(role.investor2), web3.toWei(6, 'ether'));
+        assert.equal(await instance.totalSupply(), web3.toWei(22, 'ether'));
+
+        await instance.approve(role.investor2, web3.toWei(2, 'ether'), {from: role.investor1});
+        await expectThrow(instance.transferFrom(role.investor1, role.investor3, web3.toWei(5, 'ether'), {from: role.investor2}));
+        await instance.transferFrom(role.investor1, role.investor3, web3.toWei(2, 'ether'), {from: role.investor2});
+
+        assert.equal(await instance.balanceOf(role.investor1), web3.toWei(11.75, 'ether'));
+        assert.equal(await instance.balanceOf(role.investor2), web3.toWei(6, 'ether'), 'dividends must not be triggered yet');
+        assert.equal(await instance.balanceOf(role.investor3), web3.toWei(2, 'ether'));
+        assert.equal(await instance.totalSupply(), web3.toWei(22.0, 'ether'));
+
+        await instance.mint(role.investor1, web3.toWei(4, 'ether'), {from: role.minter});
+
+        await instance.approve(role.investor2, web3.toWei(3, 'ether'), {from: role.investor1});
+        await instance.transferFrom(role.investor1, role.investor2, web3.toWei(1, 'ether'), {from: role.investor2});
+        await expectThrow(instance.transferFrom(role.investor1, role.investor2, web3.toWei(2.1, 'ether'), {from: role.investor2}));
+        await expectThrow(instance.transferFrom(role.investor1, role.investor3, web3.toWei(2.1, 'ether'), {from: role.investor2}));
+        await instance.transferFrom(role.investor1, role.investor2, web3.toWei(2, 'ether'), {from: role.investor2});
+
+        assert.equal(await instance.balanceOf(role.investor1), web3.toWei(12.75, 'ether'));
+        assert.equal(await instance.balanceOf(role.investor2), web3.toWei(11.25, 'ether'));
+        assert.equal(await instance.balanceOf(role.investor3), web3.toWei(2, 'ether'));
+        assert.equal(await instance.totalSupply(), web3.toWei(26.0, 'ether'));
+
+        await checkMintingOnlyByMinter(instance);
+        await checkIllegalTransfersThrows(instance);
+    });
+
+
     it("test transfer,mint,emission", async function() {
         const role = getRoles();
 
