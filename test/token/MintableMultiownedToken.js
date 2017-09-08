@@ -8,7 +8,7 @@ const MintableMultiownedTokenTestHelper = artifacts.require("../test_helpers/tok
 const l = console.log;
 
 // Note: build artifact does not get rebuilt as MintableMultiownedToken changes (by some reason)
-contract('MintableMultiownedTokenTestHelper', function(accounts) {
+contract('MintableMultiownedToken', function(accounts) {
 
     function getRoles() {
         return {
@@ -225,6 +225,22 @@ contract('MintableMultiownedTokenTestHelper', function(accounts) {
 
         await checkMintingOnlyByMinter(instance);
         await checkIllegalTransfersThrows(instance);
+    });
+
+    it("test disableMinting", async function() {
+        const role = getRoles();
+
+        const instance = await MintableMultiownedTokenTestHelper.new([role.owner1, role.owner2], 2, role.minter, {from: role.nobody});
+
+        await instance.mint(role.investor1, web3.toWei(12, 'ether'), {from: role.minter});
+        await instance.mint(role.investor2, web3.toWei(4, 'ether'), {from: role.minter});
+        assert.equal(await instance.totalSupply(), web3.toWei(16, 'ether'));
+
+        await instance.disableMinting({from: role.minter});
+
+        await expectThrow(instance.mint(role.investor1, web3.toWei(12, 'ether'), {from: role.minter}));
+        await expectThrow(instance.mint(role.owner1, web3.toWei(12, 'ether'), {from: role.minter}));
+        await expectThrow(instance.mint(role.nobody, web3.toWei(12, 'ether'), {from: role.minter}));
     });
 
 

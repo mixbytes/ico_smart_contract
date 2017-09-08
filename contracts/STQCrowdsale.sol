@@ -237,6 +237,7 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
         m_funds.changeState(FundsRegistry.State.SUCCEEDED);
         m_funds.detachController();
 
+        m_token.disableMinting();
         m_token.startCirculation();
         m_token.detachController();
     }
