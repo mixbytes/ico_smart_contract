@@ -112,7 +112,7 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
 
             // send change
             investor.transfer(change);
-            assert(startingInvariant == this.balance.add(m_funds.balance).sub(change));
+            assert(startingInvariant == this.balance.add(m_funds.balance).add(change));
         }
         else
             assert(startingInvariant == this.balance.add(m_funds.balance));

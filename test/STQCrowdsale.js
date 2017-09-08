@@ -52,6 +52,38 @@ contract('STQCrowdsale', function(accounts) {
         return web3.toWei(amount, 'ether');
     }
 
+    async function checkNotSendingEther(crowdsale, token, funds) {
+        const role = getRoles();
+
+        await expectThrow(funds.sendEther(role.nobody, web3.toWei(20, 'finney'), {from: role.nobody}));
+        await expectThrow(funds.sendEther(role.investor3, web3.toWei(20, 'finney'), {from: role.investor3}));
+
+        await funds.sendEther(role.owner1, web3.toWei(20, 'finney'), {from: role.owner1});
+        await expectThrow(funds.sendEther(role.owner1, web3.toWei(20, 'finney'), {from: role.owner2}));
+    }
+
+    async function checkNotWithdrawing(crowdsale, token, funds) {
+        const role = getRoles();
+
+        for (const from_ of [role.nobody, role.owner1, role.investor1, role.investor2, role.investor3])
+            await expectThrow(funds.withdrawPayments({from: from_}));
+    }
+
+    async function checkNotInvesting(crowdsale, token, funds) {
+        const role = getRoles();
+
+        for (const from_ of [role.nobody, role.owner1, role.investor1, role.investor2, role.investor3])
+            await expectThrow(crowdsale.sendTransaction({from: from_, value: web3.toWei(20, 'finney')}));
+    }
+
+    async function checkNoTransfers(crowdsale, token, funds) {
+        const role = getRoles();
+
+        await expectThrow(token.transfer(role.nobody, STQ(2.5), {from: role.nobody}));
+        await expectThrow(token.transfer(role.investor3, STQ(2.5), {from: role.nobody}));
+        await expectThrow(token.transfer(role.investor3, STQ(2.5), {from: role.investor2}));
+    }
+
 
     it("test instantiation", async function() {
         const role = getRoles();
@@ -107,6 +139,10 @@ contract('STQCrowdsale', function(accounts) {
         assert.equal(await token.balanceOf(role.investor3), STQ(4));
         await expectThrow(crowdsale.sendTransaction({from: role.nobody, value: web3.toWei(0, 'finney')}));
 
+        await checkNoTransfers(crowdsale, token, funds);
+        await checkNotWithdrawing(crowdsale, token, funds);
+        await checkNotSendingEther(crowdsale, token, funds);
+
         // too late
         await crowdsale.setTime(1518660000, {from: role.owner1});
         await expectThrow(crowdsale.sendTransaction({from: role.investor1, value: web3.toWei(20, 'finney')}));
@@ -134,18 +170,46 @@ contract('STQCrowdsale', function(accounts) {
         await crowdsale.checkTime({from: role.owner1});
 
         assert.equal(await crowdsale.m_state(), 3);
-        await expectThrow(crowdsale.sendTransaction({from: role.investor3, value: web3.toWei(40, 'finney')}));
 
         await expectThrow(funds.withdrawPayments({from: role.investor3}));
         await funds.withdrawPayments({from: role.investor2});
         await assertBalances(crowdsale, token, funds, web3.toWei(20, 'finney'));
 
         await expectThrow(funds.withdrawPayments({from: role.nobody}));
-        await funds.sendEther(role.owner1, web3.toWei(20, 'finney'), {from: role.owner1});
-        await expectThrow(funds.sendEther(role.owner1, web3.toWei(20, 'finney'), {from: role.owner2}));
+
+        await checkNoTransfers(crowdsale, token, funds);
+        await checkNotInvesting(crowdsale, token, funds);
+        await checkNotSendingEther(crowdsale, token, funds);
 
         await funds.withdrawPayments({from: role.investor1});
         await assertBalances(crowdsale, token, funds, web3.toWei(0, 'finney'));
+    });
+
+
+    it("test max cap", async function() {
+        const role = getRoles();
+
+        const [crowdsale, token, funds] = await instantiate();
+
+        await crowdsale.setTime(1505692800, {from: role.owner1});
+        await crowdsale.sendTransaction({from: role.investor2, value: web3.toWei(20, 'finney')});
+        await assertBalances(crowdsale, token, funds, web3.toWei(20, 'finney'));
+        assert.equal(await token.balanceOf(role.investor2), STQ(2.5));
+        assert.equal(await token.totalSupply(), STQ(2.5));
+
+        const investor3initial = await web3.eth.getBalance(role.investor3);
+        await crowdsale.sendTransaction({from: role.investor3, value: web3.toWei(2000, 'finney')});
+
+        const investor3spent = investor3initial.sub(await web3.eth.getBalance(role.investor3));
+        assert(investor3spent.lt(web3.toWei(1000, 'finney')), 'change has to be sent');
+
+        assert.equal(await crowdsale.m_state(), 4);
+        await assertBalances(crowdsale, token, funds, web3.toWei(400, 'finney'));
+        assert.equal(await token.balanceOf(role.investor2), STQ(2.5));
+        assert.equal(await token.balanceOf(role.investor3), STQ(47.5));
+
+        await checkNotInvesting(crowdsale, token, funds);
+        await checkNotWithdrawing(crowdsale, token, funds);
     });
 
 
@@ -185,6 +249,7 @@ contract('STQCrowdsale', function(accounts) {
         assert.equal(await token.balanceOf(role.investor3), STQ(12.5));
         assert.equal(await token.totalSupply(), STQ(15));
 
+        // finish
         await crowdsale.setTime(1508371200, {from: role.owner1});
         await crowdsale.checkTime({from: role.owner1});
 
@@ -196,4 +261,109 @@ contract('STQCrowdsale', function(accounts) {
         assert.equal(await token.totalSupply(), STQ(75));
         await assertBalances(crowdsale, token, funds, web3.toWei(120, 'finney'));
     });
+
+
+    it("test transfers", async function() {
+        const role = getRoles();
+
+        const [crowdsale, token, funds] = await instantiate();
+
+        await crowdsale.setTime(1505692800, {from: role.owner1});
+        await crowdsale.sendTransaction({from: role.investor3, value: web3.toWei(20, 'finney')});
+        await crowdsale.sendTransaction({from: role.investor2, value: web3.toWei(100, 'finney')});
+        await assertBalances(crowdsale, token, funds, web3.toWei(120, 'finney'));
+        assert.equal(await token.balanceOf(role.investor3), STQ(2.5));
+        assert.equal(await token.balanceOf(role.investor2), STQ(12.5));
+        assert.equal(await token.totalSupply(), STQ(15));
+
+        await checkNoTransfers(crowdsale, token, funds);
+
+        // finish
+        await crowdsale.setTime(1508371200, {from: role.owner1});
+        await crowdsale.checkTime({from: role.owner1});
+
+        await expectThrow(token.transfer(role.nobody, STQ(2.5), {from: role.nobody}));
+        await expectThrow(token.transfer(role.investor3, STQ(2.5), {from: role.nobody}));
+
+        await token.transfer(role.investor3, STQ(2.5), {from: role.investor2});
+        await assertBalances(crowdsale, token, funds, web3.toWei(120, 'finney'));
+        assert.equal(await token.balanceOf(role.investor3), STQ(5));
+        assert.equal(await token.balanceOf(role.investor2), STQ(10));
+        assert.equal(await token.totalSupply(), STQ(75));   // 15 + 60 minted for owners
+
+        await checkNotInvesting(crowdsale, token, funds);
+        await checkNotWithdrawing(crowdsale, token, funds);
+    });
+
+
+    it("test pause", async function() {
+        const role = getRoles();
+
+        const [crowdsale, token, funds] = await instantiate();
+
+        await crowdsale.setTime(1505692810, {from: role.owner1});
+        await crowdsale.sendTransaction({from: role.investor3, value: web3.toWei(20, 'finney')});
+        await crowdsale.setTime(1505692812, {from: role.owner1});
+        await crowdsale.sendTransaction({from: role.investor2, value: web3.toWei(100, 'finney')});
+        await assertBalances(crowdsale, token, funds, web3.toWei(120, 'finney'));
+        assert.equal(await token.balanceOf(role.investor3), STQ(2.5));
+        assert.equal(await token.balanceOf(role.investor2), STQ(12.5));
+        assert.equal(await token.totalSupply(), STQ(15));
+
+        // pause
+        await expectThrow(crowdsale.pause({from: role.nobody}));
+        await expectThrow(crowdsale.pause({from: role.investor3}));
+        await crowdsale.pause({from: role.owner3});
+        assert.equal(await crowdsale.m_state(), 2);
+
+        await checkNoTransfers(crowdsale, token, funds);
+        await checkNotInvesting(crowdsale, token, funds);
+        await checkNotWithdrawing(crowdsale, token, funds);
+        await checkNotSendingEther(crowdsale, token, funds);
+
+        // continue
+        await crowdsale.unpause({from: role.owner1});
+        assert.equal(await crowdsale.m_state(), 2);
+        await crowdsale.unpause({from: role.owner3});
+        assert.equal(await crowdsale.m_state(), 1);
+
+        await crowdsale.sendTransaction({from: role.investor3, value: web3.toWei(20, 'finney')});
+        await assertBalances(crowdsale, token, funds, web3.toWei(140, 'finney'));
+        assert.equal(await token.balanceOf(role.investor3), STQ(5));
+        assert.equal(await token.balanceOf(role.investor2), STQ(12.5));
+        assert.equal(await token.totalSupply(), STQ(17.5));
+
+        await checkNoTransfers(crowdsale, token, funds);
+        await checkNotWithdrawing(crowdsale, token, funds);
+        await checkNotSendingEther(crowdsale, token, funds);
+    });
+
+
+    it("test fail from pause", async function() {
+        const role = getRoles();
+
+        const [crowdsale, token, funds] = await instantiate();
+
+        await crowdsale.setTime(1505692810, {from: role.owner1});
+        await crowdsale.sendTransaction({from: role.investor3, value: web3.toWei(20, 'finney')});
+        await crowdsale.setTime(1505692812, {from: role.owner1});
+        await crowdsale.sendTransaction({from: role.investor2, value: web3.toWei(100, 'finney')});
+        await assertBalances(crowdsale, token, funds, web3.toWei(120, 'finney'));
+        assert.equal(await token.balanceOf(role.investor3), STQ(2.5));
+        assert.equal(await token.balanceOf(role.investor2), STQ(12.5));
+        assert.equal(await token.totalSupply(), STQ(15));
+
+        await crowdsale.pause({from: role.owner3});
+
+        // fail
+        await crowdsale.fail({from: role.owner1});
+        assert.equal(await crowdsale.m_state(), 2);
+        await crowdsale.fail({from: role.owner3});
+        assert.equal(await crowdsale.m_state(), 3);
+
+        await checkNoTransfers(crowdsale, token, funds);
+        await checkNotInvesting(crowdsale, token, funds);
+        await checkNotSendingEther(crowdsale, token, funds);
+    });
+
 });
