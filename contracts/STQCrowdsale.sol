@@ -39,6 +39,26 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
         _;
     }
 
+    /// @dev automatic check for unaccounted withdrawals
+    modifier fundsChecker() {
+        assert(m_state == IcoState.ICO);
+
+        uint atTheBeginning = m_funds.balance;
+        if (atTheBeginning < m_lastFundsAmount) {
+            changeState(IcoState.PAUSED);
+            if (msg.value > 0)
+                msg.sender.transfer(msg.value); // we cant throw (have to save state), so refunding this way
+        } else {
+            _;
+
+            if (m_funds.balance < atTheBeginning) {
+                changeState(IcoState.PAUSED);
+            } else {
+                m_lastFundsAmount = m_funds.balance;
+            }
+        }
+    }
+
 
     // PUBLIC interface
 
@@ -76,15 +96,9 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
         nonReentrant
         timedStateChange
         requiresState(IcoState.ICO)
+        fundsChecker
         returns (uint)
     {
-        // automatic check for unaccounted withdrawals
-        if (maybeAutoPause()) {
-            changeState(IcoState.PAUSED);
-            msg.sender.transfer(msg.value);     // we cant throw (have to save state), so refunding this way
-            return 0;
-        }
-
         address investor = msg.sender;
         uint256 payment = msg.value;
         require(payment > 0);
@@ -230,18 +244,6 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
     function onFailure() private {
         m_funds.changeState(FundsRegistry.State.REFUNDING);
         m_funds.detachController();
-    }
-
-    /// @dev automatic check for unaccounted withdrawals
-    function maybeAutoPause() private returns (bool) {
-        if (IcoState.SUCCEEDED == m_state || IcoState.FAILED == m_state)
-            return false;   // expecting withdrawals
-
-        if (m_funds.balance < m_lastFundsAmount)
-            return true;
-
-        m_lastFundsAmount = m_funds.balance;
-        return false;
     }
 
 
