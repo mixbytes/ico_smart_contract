@@ -92,7 +92,7 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
         uint startingInvariant = this.balance.add(m_funds.balance);
 
         // checking for max cap
-        uint fundsAllowed = c_MaximumFunds.sub(m_funds.totalInvested());
+        uint fundsAllowed = getMaximumFunds().sub(m_funds.totalInvested());
         assert(0 != fundsAllowed);  // in this case state must not be IcoState.ICO
         payment = fundsAllowed.min256(payment);
         uint256 change = msg.value.sub(payment);
@@ -107,7 +107,7 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
         // check if ICO must be closed early
         if (change > 0)
         {
-            assert(c_MaximumFunds == m_funds.totalInvested());
+            assert(getMaximumFunds() == m_funds.totalInvested());
             finishICO();
 
             // send change
@@ -188,7 +188,7 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
     // INTERNAL functions
 
     function finishICO() private {
-        if (m_funds.totalInvested() < c_MinFunds)
+        if (m_funds.totalInvested() < getMinFunds())
             changeState(IcoState.FAILED);
         else
             changeState(IcoState.SUCCEEDED);
@@ -204,14 +204,14 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
         else assert(false);
 
         m_state = _newState;
+        StateChanged(m_state);
+
         // this should be tightly linked
         if (IcoState.SUCCEEDED == m_state) {
             onSuccess();
         } else if (IcoState.FAILED == m_state) {
             onFailure();
         }
-
-        StateChanged(m_state);
     }
 
     function onSuccess() private {
@@ -268,6 +268,16 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
     /// @dev to be overridden in tests
     function getCurrentTime() internal constant returns (uint) {
         return now;
+    }
+
+    /// @dev to be overridden in tests
+    function getMinFunds() internal constant returns (uint) {
+        return c_MinFunds;
+    }
+
+    /// @dev to be overridden in tests
+    function getMaximumFunds() internal constant returns (uint) {
+        return c_MaximumFunds;
     }
 
 

@@ -14,7 +14,7 @@ import './multiowned.sol';
 contract MultiownedControlled is multiowned {
 
     event ControllerSet(address controller);
-    event ControllerRetired();
+    event ControllerRetired(address was);
 
 
     modifier onlyController {
@@ -40,8 +40,9 @@ contract MultiownedControlled is multiowned {
 
     /// @notice ability for controller to step down
     function detachController() external onlyController {
+        address was = m_controller;
         m_controller = address(0);
-        ControllerRetired();
+        ControllerRetired(was);
     }
 
 

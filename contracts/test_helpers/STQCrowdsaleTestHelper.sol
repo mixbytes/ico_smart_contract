@@ -1,7 +1,6 @@
 pragma solidity 0.4.15;
 
 import '../STQCrowdsale.sol';
-import '../TestC.sol';
 
 
 /// @title Test helper for STQCrowdsale, DONT use it in production!
@@ -12,6 +11,7 @@ contract STQCrowdsaleTestHelper is STQCrowdsale {
     {
     }
 
+
     function getCurrentTime() internal constant returns (uint) {
         return m_time;
     }
@@ -19,6 +19,16 @@ contract STQCrowdsaleTestHelper is STQCrowdsale {
     function setTime(uint time) external onlyowner {
         m_time = time;
     }
+
+
+    function getMinFunds() internal constant returns (uint) {
+        return 100 finney;
+    }
+
+    function getMaximumFunds() internal constant returns (uint) {
+        return 400 finney;
+    }
+
 
     uint m_time;
 }
