@@ -547,4 +547,20 @@ contract('STQCrowdsale', function(accounts) {
         assert.equal(await token.balanceOf(role.investor3), STQ(12.5));
         assert.equal(await token.totalSupply(), STQ(20));
     });
+
+
+    it("test remaining lower than min investment", async function() {
+        const role = getRoles();
+
+        const [crowdsale, token, funds] = await instantiate();
+
+        await crowdsale.setTime(1505692810, {from: role.owner1});
+
+        await crowdsale.sendTransaction({from: role.investor1, value: web3.toWei(395, 'finney')});
+        await assertBalances(crowdsale, token, funds, web3.toWei(395, 'finney'));
+
+        await crowdsale.sendTransaction({from: role.investor3, value: web3.toWei(100, 'finney')});
+        await assertBalances(crowdsale, token, funds, web3.toWei(400, 'finney'));
+        assert.equal(await crowdsale.m_state(), 4);
+    });
 });

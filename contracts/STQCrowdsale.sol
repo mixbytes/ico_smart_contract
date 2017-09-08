@@ -101,7 +101,7 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
     {
         address investor = msg.sender;
         uint256 payment = msg.value;
-        require(payment > 0);
+        require(payment >= c_MinInvestment);
 
         uint startingInvariant = this.balance.add(m_funds.balance);
 
@@ -287,6 +287,9 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
 
     /// @notice starting exchange rate of STQ
     uint public constant c_STQperETH = 100;
+
+    /// @notice minimum investment
+    uint public constant c_MinInvestment = 10 finney;
 
     /// @notice minimum investments to consider ICO as a success
     uint public constant c_MinFunds = 1000 ether;
