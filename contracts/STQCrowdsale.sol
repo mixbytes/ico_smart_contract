@@ -73,9 +73,9 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
     function buy()
         public
         payable
+        nonReentrant
         timedStateChange
         requiresState(IcoState.ICO)
-        nonReentrant
         returns (uint)
     {
         // automatic check for unaccounted withdrawals

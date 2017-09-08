@@ -88,8 +88,8 @@ contract FundsRegistry is MultiownedControlled, ReentrancyGuard {
     /// @notice withdraw accumulated balance, called by payee.
     function withdrawPayments()
         external
-        requiresState(State.REFUNDING)
         nonReentrant
+        requiresState(State.REFUNDING)
     {
         address payee = msg.sender;
         uint256 payment = m_weiBalances[payee];
