@@ -30,13 +30,19 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
     }
 
     /// @dev triggers some state changes based on current time
+    /// note: function body could be skipped!
     modifier timedStateChange() {
         if (IcoState.INIT == m_state && getCurrentTime() >= getStartTime())
             changeState(IcoState.ICO);
-        if (IcoState.ICO == m_state && getCurrentTime() > getEndTime())
-            finishICO();
 
-        _;
+        if (IcoState.ICO == m_state && getCurrentTime() > getEndTime()) {
+            if (msg.value > 0)
+                msg.sender.transfer(msg.value);
+
+            finishICO();
+        } else {
+            _;
+        }
     }
 
     /// @dev automatic check for unaccounted withdrawals

@@ -152,11 +152,17 @@ contract('STQCrowdsale', function(accounts) {
 
         // too late
         await crowdsale.setTime(1518660000, {from: role.owner1});
-        await expectThrow(crowdsale.sendTransaction({from: role.investor1, value: web3.toWei(20, 'finney')}));
-        await expectThrow(crowdsale.sendTransaction({from: role.nobody, value: web3.toWei(0, 'finney')}));
+        // this tx will implicitly finish ICO
+        await crowdsale.sendTransaction({from: role.investor2, value: web3.toWei(20, 'finney')});
+        assert.equal(await token.balanceOf(role.investor2), STQ(10.5));
+        await expectThrow(crowdsale.sendTransaction({from: role.nobody, value: web3.toWei(20, 'finney')}));
         assert.equal(await token.balanceOf(role.nobody), STQ(0));
 
-        assert.equal(await token.totalSupply(), STQ(19.1));
+        const totalSupply = await token.totalSupply();  // 95499999999999999998
+        assert(totalSupply.lt(STQ(96)) && totalSupply.gt(STQ(95)));
+
+        await checkNotInvesting(crowdsale, token, funds);
+        await checkNotWithdrawing(crowdsale, token, funds);
 
         assert.equal(await funds.getInvestorsCount(), 3);
         assert.equal(await funds.m_investors(0), role.investor1);
