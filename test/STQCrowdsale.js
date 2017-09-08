@@ -441,4 +441,110 @@ contract('STQCrowdsale', function(accounts) {
         await checkNotWithdrawing(crowdsale, token, funds);
         await checkNotSendingEther(crowdsale, token, funds);
     });
+
+
+    it("test emissions", async function() {
+        const role = getRoles();
+
+        const [crowdsale, token, funds] = await instantiate();
+
+        await crowdsale.setTime(1505692810, {from: role.owner1});
+        await crowdsale.sendTransaction({from: role.investor2, value: web3.toWei(20, 'finney')});
+        await crowdsale.sendTransaction({from: role.investor3, value: web3.toWei(100, 'finney')});
+        await assertBalances(crowdsale, token, funds, web3.toWei(120, 'finney'));
+
+        // finish
+        await crowdsale.setTime(1508371200, {from: role.owner1});
+        await crowdsale.checkTime({from: role.owner1});
+
+        await checkNotInvesting(crowdsale, token, funds);
+        await checkNotWithdrawing(crowdsale, token, funds);
+
+        assert.equal(await token.balanceOf(role.owner1), STQ(20));
+        assert.equal(await token.balanceOf(role.owner2), STQ(20));
+        assert.equal(await token.balanceOf(role.owner3), STQ(20));
+        assert.equal(await token.balanceOf(role.investor2), STQ(2.5));
+        assert.equal(await token.balanceOf(role.investor3), STQ(12.5));
+        assert.equal(await token.totalSupply(), STQ(75));
+
+        // checking circulation
+        await token.transfer(role.investor3, STQ(2.5), {from: role.investor2});
+        await token.transfer(role.investor2, STQ(10), {from: role.owner1});
+        assert.equal(await token.balanceOf(role.owner1), STQ(10));
+        assert.equal(await token.balanceOf(role.owner2), STQ(20));
+        assert.equal(await token.balanceOf(role.owner3), STQ(20));
+        assert.equal(await token.balanceOf(role.investor2), STQ(10));
+        assert.equal(await token.balanceOf(role.investor3), STQ(15));
+        assert.equal(await token.totalSupply(), STQ(75));
+
+        await token.emission(15, {from: role.owner2});
+        await token.emission(15, {from: role.owner3});
+        assert.equal(await token.totalSupply(), STQ(90));
+
+        await token.requestDividends({from: role.investor3});
+        await token.requestDividends({from: role.owner1});
+        await token.transfer(role.investor2, STQ(5), {from: role.investor3});
+
+        assert.equal(await token.balanceOf(role.owner1), STQ(12));
+        assert.equal(await token.balanceOf(role.owner2), STQ(20));
+        assert.equal(await token.balanceOf(role.owner3), STQ(20));
+        assert.equal(await token.balanceOf(role.investor2), STQ(17));
+        assert.equal(await token.balanceOf(role.investor3), STQ(13));
+        assert.equal(await token.totalSupply(), STQ(90));
+
+        // further requests change nothing
+        await token.requestDividends({from: role.investor2});
+        await token.requestDividends({from: role.investor3});
+        assert.equal(await token.balanceOf(role.investor2), STQ(17));
+        assert.equal(await token.balanceOf(role.investor3), STQ(13));
+
+        await checkNotInvesting(crowdsale, token, funds);
+        await checkNotWithdrawing(crowdsale, token, funds);
+    });
+
+
+    it("test crowdsale replacement", async function() {
+        const role = getRoles();
+
+        const [crowdsale, token, funds] = await instantiate();
+
+        await crowdsale.setTime(1505692810, {from: role.owner1});
+        await crowdsale.sendTransaction({from: role.investor1, value: web3.toWei(20, 'finney')});
+        await crowdsale.sendTransaction({from: role.investor3, value: web3.toWei(100, 'finney')});
+
+        await assertBalances(crowdsale, token, funds, web3.toWei(120, 'finney'));
+        assert.equal(await token.balanceOf(role.investor1), STQ(2.5));
+        assert.equal(await token.balanceOf(role.investor3), STQ(12.5));
+        assert.equal(await token.totalSupply(), STQ(15));
+
+        // replace
+        const crowdsale2 = await STQCrowdsale.new([role.owner1, role.owner2, role.owner3], token.address, funds.address, {from: role.nobody});
+        await crowdsale2.setTime(1505692810, {from: role.owner1});
+
+        await token.setController(crowdsale2.address, {from: role.owner1});
+        await token.setController(crowdsale2.address, {from: role.owner2});
+
+        await funds.setController(crowdsale2.address, {from: role.owner1});
+        await funds.setController(crowdsale2.address, {from: role.owner2});
+
+        // crowdsale is no longer functioning
+        await checkNoTransfers(crowdsale, token, funds);
+        await checkNotInvesting(crowdsale, token, funds);
+        await checkNotWithdrawing(crowdsale, token, funds);
+        await checkNotSendingEther(crowdsale, token, funds);
+
+        // tokens and funds are intact
+        await assertBalances(crowdsale2, token, funds, web3.toWei(120, 'finney'));
+        assert.equal(await token.balanceOf(role.investor1), STQ(2.5));
+        assert.equal(await token.balanceOf(role.investor3), STQ(12.5));
+        assert.equal(await token.totalSupply(), STQ(15));
+
+        // crowdsale2 is functioning
+        await crowdsale2.sendTransaction({from: role.investor2, value: web3.toWei(40, 'finney')});
+        await assertBalances(crowdsale2, token, funds, web3.toWei(160, 'finney'));
+        assert.equal(await token.balanceOf(role.investor1), STQ(2.5));
+        assert.equal(await token.balanceOf(role.investor2), STQ(5));
+        assert.equal(await token.balanceOf(role.investor3), STQ(12.5));
+        assert.equal(await token.totalSupply(), STQ(20));
+    });
 });

@@ -10,7 +10,7 @@ import 'zeppelin-solidity/contracts/math/SafeMath.sol';
 
 
 /// @title Storiqa ICO contract
-// FIXME WARNING: dont use it, it was't tested and audited yet
+// FIXME WARNING: dont use it, it was't audited yet
 contract STQCrowdsale is multiowned, ReentrancyGuard {
     using Math for uint256;
     using SafeMath for uint256;
