@@ -39,6 +39,7 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
 
             if (msg.value > 0)
                 msg.sender.transfer(msg.value);
+            // note that execution of further (but not preceding!) modifiers and functions ends here
         } else {
             _;
         }
@@ -53,6 +54,7 @@ contract STQCrowdsale is multiowned, ReentrancyGuard {
             changeState(IcoState.PAUSED);
             if (msg.value > 0)
                 msg.sender.transfer(msg.value); // we cant throw (have to save state), so refunding this way
+            // note that execution of further (but not preceding!) modifiers and functions ends here
         } else {
             _;
 
