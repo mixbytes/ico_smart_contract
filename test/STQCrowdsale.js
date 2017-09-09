@@ -190,6 +190,7 @@ contract('STQCrowdsale', function(accounts) {
         assert.equal(await crowdsale.m_state(), 3);
 
         await expectThrow(funds.withdrawPayments({from: role.investor3}));
+        await expectThrow(funds.withdrawPayments({from: role.owner3}));
         await funds.withdrawPayments({from: role.investor2});
         await assertBalances(crowdsale, token, funds, web3.toWei(20, 'finney'));
 
@@ -354,6 +355,12 @@ contract('STQCrowdsale', function(accounts) {
         await checkNoTransfers(crowdsale, token, funds);
         await checkNotWithdrawing(crowdsale, token, funds);
         await checkNotSendingEther(crowdsale, token, funds);
+
+        // finish
+        await crowdsale.setTime(1508371200, {from: role.owner1});
+        await crowdsale.checkTime({from: role.owner1});
+        assert.equal(await crowdsale.m_state(), 4);
+        await assertBalances(crowdsale, token, funds, web3.toWei(140, 'finney'));
     });
 
 

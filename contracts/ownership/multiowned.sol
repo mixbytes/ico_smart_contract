@@ -12,6 +12,8 @@
 
 pragma solidity 0.4.15;
 
+
+/// note: during any ownership changes all pending operations (waiting for more signatures) are cancelled
 // TODO acceptOwnership
 contract multiowned {
 
@@ -31,14 +33,15 @@ contract multiowned {
 
 	// EVENTS
 
-    // this contract only has six types of events: it can accept a confirmation, in which case
-    // we record owner and operation (hash) alongside it.
     event Confirmation(address owner, bytes32 operation);
     event Revoke(address owner, bytes32 operation);
+    event FinalConfirmation(address owner, bytes32 operation);
+
     // some others are in the case of an owner changing.
     event OwnerChanged(address oldOwner, address newOwner);
     event OwnerAdded(address newOwner);
     event OwnerRemoved(address oldOwner);
+
     // the last one is emitted if the required signatures change
     event RequirementChanged(uint newRequirement);
 
@@ -243,17 +246,17 @@ contract multiowned {
         onlyowner
         returns (bool)
     {
+        if (512 == m_multiOwnedPendingIndex.length)
+            // In case m_multiOwnedPendingIndex grows too much we have to shrink it: otherwise at some point
+            // we won't be able to do it because of block gas limit.
+            // Yes, pending confirmations will be lost. Dont see any security or stability implications.
+            // TODO use more graceful approach like compact or removal of clearPending completely
+            clearPending();
+
         var pending = m_multiOwnedPending[_operation];
 
         // if we're not yet working on this operation, switch over and reset the confirmation status.
         if (! isOperationActive(_operation)) {
-            if (512 == m_multiOwnedPendingIndex.length)
-                // In case m_multiOwnedPendingIndex grows too much we have to shrink it: otherwise at some point
-                // we won't be able to do it because of block gas limit.
-                // Yes, pending confirmations will be lost. Dont see any security or stability implications.
-                // TODO use more graceful approach like compact or removal of clearPending completely
-                clearPending();
-
             // reset count of confirmations needed.
             pending.yetNeeded = m_multiOwnedRequired;
             // reset which owners have confirmed (none) - set our bitmap to 0.
@@ -267,13 +270,13 @@ contract multiowned {
         uint ownerIndexBit = makeOwnerBitmapBit(msg.sender);
         // make sure we (the message sender) haven't confirmed this operation previously.
         if (pending.ownersDone & ownerIndexBit == 0) {
-            Confirmation(msg.sender, _operation);
             // ok - check if count is enough to go ahead.
             assert(pending.yetNeeded > 0);
             if (pending.yetNeeded == 1) {
                 // enough confirmations: reset and run interior.
                 delete m_multiOwnedPendingIndex[m_multiOwnedPending[_operation].index];
                 delete m_multiOwnedPending[_operation];
+                FinalConfirmation(msg.sender, _operation);
                 return true;
             }
             else
@@ -282,6 +285,7 @@ contract multiowned {
                 pending.yetNeeded--;
                 pending.ownersDone |= ownerIndexBit;
                 assertOperationIsConsistent(_operation);
+                Confirmation(msg.sender, _operation);
             }
         }
     }
