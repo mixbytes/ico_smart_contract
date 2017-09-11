@@ -17,7 +17,12 @@ def main():
     FundsRegistry_address = 0xc045aeef2a42d2e07a02b1c9689e7f97b74d8954
 
     print("STQToken:", encodeAddressArray(owners))
-    print("FundsRegistry:", encodeAddressArray(owners) + encodeUint(2) + encodeAddress(0))
+    print("FundsRegistry:",  (
+        encodeUint(3 * 32)      # offset of the dynamic array
+        + encodeUint(2)         # arg: uint 2
+        + encodeAddress(0)      # arg: address 0
+        + encodeAddressArray(owners)    # arg: dynamic array  _owners
+    ))
     print("STQCrowdsale:", encodeAddressArray(owners) + encodeAddress(STQToken_address) + encodeAddress(FundsRegistry_address))
 
 
