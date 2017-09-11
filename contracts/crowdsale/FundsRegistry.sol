@@ -73,7 +73,9 @@ contract FundsRegistry is MultiownedControlled, ReentrancyGuard {
         Invested(_investor, amount);
     }
 
-    /// @dev Send `value` of ether to address `to`
+    /// @notice owners: send `value` of ether to address `to`, can be called if crowdsale succeeded
+    /// @param to where to send ether
+    /// @param value amount of wei to send
     function sendEther(address to, uint value)
         external
         onlymanyowners(sha3(msg.data))
@@ -85,7 +87,7 @@ contract FundsRegistry is MultiownedControlled, ReentrancyGuard {
         EtherSent(to, value);
     }
 
-    /// @notice withdraw accumulated balance, called by payee.
+    /// @notice withdraw accumulated balance, called by payee in case crowdsale failed
     function withdrawPayments()
         external
         nonReentrant

@@ -116,7 +116,9 @@ contract multiowned {
         assertOwnersAreConsistent();
     }
 
-    // Replaces an owner `_from` with another `_to`.
+    /// @notice replaces an owner `_from` with another `_to`.
+    /// @param _from address of owner to replace
+    /// @param _to address of new owner
     // All pending operations will be canceled!
     function changeOwner(address _from, address _to)
         external
@@ -136,6 +138,8 @@ contract multiowned {
         OwnerChanged(_from, _to);
     }
 
+    /// @notice adds an owner
+    /// @param _owner address of new owner
     // All pending operations will be canceled!
     function addOwner(address _owner)
         external
@@ -154,6 +158,8 @@ contract multiowned {
         OwnerAdded(_owner);
     }
 
+    /// @notice removes an owner
+    /// @param _owner address of owner to remove
     // All pending operations will be canceled!
     function removeOwner(address _owner)
         external
@@ -175,6 +181,8 @@ contract multiowned {
         OwnerRemoved(_owner);
     }
 
+    /// @notice changes the required number of owner signatures
+    /// @param _newRequired new number of signatures required
     // All pending operations will be canceled!
     function changeRequirement(uint _newRequired)
         external
@@ -186,11 +194,14 @@ contract multiowned {
         RequirementChanged(_newRequired);
     }
 
-    // Gets an owner by 0-indexed position
+    /// @notice Gets an owner by 0-indexed position
+    /// @param ownerIndex 0-indexed owner position
     function getOwner(uint ownerIndex) public constant returns (address) {
         return m_owners[ownerIndex + 1];
     }
 
+    /// @notice Gets owners
+    /// @return memory array of owners
     function getOwners() public constant returns (address[]) {
         address[] memory result = new address[](m_numOwners);
         for (uint i = 0; i < m_numOwners; i++)
@@ -199,18 +210,23 @@ contract multiowned {
         return result;
     }
 
+    /// @notice checks if provided address is an owner address
+    /// @param _addr address to check
+    /// @return true if it's an owner
     function isOwner(address _addr) public constant returns (bool) {
         return m_ownerIndex[_addr] > 0;
     }
 
-    // Tests ownership of the current caller.
+    /// @notice Tests ownership of the current caller.
+    /// @return true if it's an owner
     // It's advisable to call it by new owner to make sure that the same erroneous address is not copy-pasted to
     // addOwner/changeOwner and to isOwner.
     function amIOwner() external constant onlyowner returns (bool) {
         return true;
     }
 
-    // Revokes a prior confirmation of the given operation
+    /// @notice Revokes a prior confirmation of the given operation
+    /// @param _operation operation value, typically sha3(msg.data)
     function revoke(bytes32 _operation)
         external
         multiOwnedOperationIsActive(_operation)
@@ -229,6 +245,9 @@ contract multiowned {
         Revoke(msg.sender, _operation);
     }
 
+    /// @notice Checks if owner confirmed given operation
+    /// @param _operation operation value, typically sha3(msg.data)
+    /// @param _owner an owner address
     function hasConfirmed(bytes32 _operation, address _owner)
         external
         constant

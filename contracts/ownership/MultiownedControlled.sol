@@ -32,13 +32,13 @@ contract MultiownedControlled is multiowned {
         ControllerSet(m_controller);
     }
 
-    /// @notice sets the controller
+    /// @dev sets the controller
     function setController(address _controller) external onlymanyowners(sha3(msg.data)) {
         m_controller = _controller;
         ControllerSet(m_controller);
     }
 
-    /// @notice ability for controller to step down
+    /// @dev ability for controller to step down
     function detachController() external onlyController {
         address was = m_controller;
         m_controller = address(0);
