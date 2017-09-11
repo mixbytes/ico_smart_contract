@@ -2,6 +2,8 @@
 
 const _owners = [111, 222, 333];
 
+const SimpleMultiSigWallet = artifacts.require("./ownership/SimpleMultiSigWallet.sol");
+
 const STQToken = artifacts.require("./STQToken.sol");
 const FundsRegistry = artifacts.require("./crowdsale/FundsRegistry.sol");
 
@@ -12,6 +14,7 @@ const STQCrowdsaleTestHelper = artifacts.require("./test_helpers/STQCrowdsaleTes
 
 
 module.exports = function(deployer, network) {
+  deployer.deploy(SimpleMultiSigWallet, _owners, 2);
   deployer.deploy(STQToken, _owners).then(function() {
     return deployer.deploy(FundsRegistry, _owners, 2, 0);
   }).then(function() {
