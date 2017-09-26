@@ -1,34 +1,13 @@
 'use strict';
 
-const _owners = [111, 222, 333];
+const STQPreSale = artifacts.require("./STQPreSale.sol");
 
-const SimpleMultiSigWallet = artifacts.require("./ownership/SimpleMultiSigWallet.sol");
-
-const STQToken = artifacts.require("./STQToken.sol");
-const FundsRegistry = artifacts.require("./crowdsale/FundsRegistry.sol");
-
-const FixedTimeBonuses = artifacts.require("./crowdsale/FixedTimeBonuses.sol");
-const STQCrowdsale = artifacts.require("./STQCrowdsale.sol");
-
-const STQCrowdsaleTestHelper = artifacts.require("./test_helpers/STQCrowdsaleTestHelper.sol");
+const preSaleWallet = '0x111';
 
 
 module.exports = function(deployer, network) {
-  deployer.deploy(SimpleMultiSigWallet, _owners, 2);
-  deployer.deploy(STQToken, _owners).then(function() {
-    return deployer.deploy(FundsRegistry, _owners, 2, 0);
-  }).then(function() {
-    return deployer.deploy(FixedTimeBonuses);
-  }).then(function() {
-    if (network == "development") {
-      deployer.link(FixedTimeBonuses, STQCrowdsaleTestHelper);
-    }
-    deployer.link(FixedTimeBonuses, STQCrowdsale);
-    return deployer.deploy(STQCrowdsale, _owners, STQToken.address, FundsRegistry.address);
-  });
+  deployer.deploy(STQPreSale, '0x2bD1F12269c1Ff80042c8D354BbA4C1Ca52e2061', preSaleWallet);
 
   // owners have to manually perform
-  // STQToken.setController(address of STQCrowdsale);
-  // and
-  // FundsRegistry.setController(address of STQCrowdsale);
+  // STQToken.setController(address of STQPreSale);
 };
