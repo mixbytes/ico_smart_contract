@@ -4,6 +4,7 @@
 
 import expectThrow from './helpers/expectThrow';
 import {l, logEvents} from './helpers/debug';
+import {instantiateCrowdsale} from './helpers/storiqa';
 
 const STQPreSale = artifacts.require("./STQPreSale.sol");
 const STQToken = artifacts.require("./STQToken.sol");
@@ -105,4 +106,27 @@ contract('STQPreSale', function(accounts) {
         await checkNoTransfers(token);
     });
 
+
+    it("test reusable token", async function() {
+        const role = getRoles();
+
+        // ok, we have an existing token
+        const [crowdsale, token, funds] = await instantiateCrowdsale(role);
+
+        await crowdsale.setTime(1505692800, {from: role.owner1});
+        await crowdsale.sendTransaction({from: role.investor1, value: web3.toWei(40, 'finney')});
+        assert.equal(await token.balanceOf(role.investor1), STQ(5));
+
+        // and we're starting a presale
+        const preSale = await STQPreSale.new(token.address, role.cash, {from: role.nobody});
+        preSale.transferOwnership(role.owner1, {from: role.nobody});
+
+        await token.setController(preSale.address, {from: role.owner1});
+        await token.setController(preSale.address, {from: role.owner2});
+
+        await preSale.sendTransaction({from: role.investor2, value: web3.toWei(40, 'finney')});
+        assert((await token.balanceOf(role.investor1)).eq(STQ(5)));
+        assert((await token.balanceOf(role.investor2)).eq(STQ(6000)));
+        assert((await token.totalSupply()).eq(STQ(6005)));
+    });
 });
