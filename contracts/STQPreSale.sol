@@ -39,6 +39,7 @@ contract STQPreSale is Ownable, ReentrancyGuard {
         address investor = msg.sender;
         uint256 payment = msg.value;
         require(payment >= c_MinInvestment);
+        require(now < 1507766400);
 
         // issue tokens
         uint stq = payment.mul(c_STQperETH);
