@@ -98,6 +98,7 @@ contract MintableMultiownedToken is MultiownedControlled, StandardToken {
     function mintInternal(address _to, uint256 _amount) internal {
         totalSupply = totalSupply.add(_amount);
         balances[_to] = balances[_to].add(_amount);
+        Transfer(0x0, _to, _amount);
         Mint(_to, _amount);
     }
 
