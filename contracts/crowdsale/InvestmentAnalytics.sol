@@ -38,14 +38,21 @@ contract InvestmentAnalytics {
     function createMorePaymentChannelsInternal(uint limit) internal returns (uint) {
         uint paymentChannelsCreated;
         for (uint i = 0; i < limit; i++) {
+            uint startingGas = msg.gas;
             /*
-             * ~150k of gas per paymentChannel,
-             * using gas price = 4Gwei 2k paymentChannels will cost ~1.2 ETH.
+             * ~170k of gas per paymentChannel,
+             * using gas price = 4Gwei 2k paymentChannels will cost ~1.4 ETH.
              */
+
             address paymentChannel = new AnalyticProxy();
             m_validPaymentChannels[paymentChannel] = true;
             m_paymentChannels.push(paymentChannel);
             paymentChannelsCreated++;
+
+            // cost of creating one channel
+            uint gasPerChannel = startingGas - msg.gas;
+            if (gasPerChannel + 50000 > msg.gas)
+                break;  // enough proxies for this call
         }
         return paymentChannelsCreated;
     }

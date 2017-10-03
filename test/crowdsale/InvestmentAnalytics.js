@@ -1,5 +1,7 @@
 'use strict';
 
+// testrpc has to be run as testrpc -u 0 -u 1 -u 2 -u 3 -u 4 -u 5
+
 import {l, logEvents} from '../helpers/debug';
 
 const InvestmentAnalytics = artifacts.require("./crowdsale/InvestmentAnalyticsTestHelper.sol");
@@ -22,5 +24,23 @@ contract('InvestmentAnalytics', function(accounts) {
 
         assert.equal(await instance.m_investmentsByPaymentChannel(paymentChannel1), web3.toWei(40, 'finney'));
         assert.equal(await instance.m_investmentsByPaymentChannel(paymentChannel5), web3.toWei(50, 'finney'));
+
+        // missing analytics in case of direct payments
+        await instance.iaInvestedBy(0x11, {from: accounts[3], value: web3.toWei(6, 'finney')});
+        await instance.iaInvestedBy(0x12, {from: accounts[4], value: web3.toWei(7, 'finney')});
+
+        assert.equal(await instance.m_investmentsByPaymentChannel(paymentChannel1), web3.toWei(40, 'finney'));
+        assert.equal(await instance.m_investmentsByPaymentChannel(paymentChannel5), web3.toWei(50, 'finney'));
+        for (let channel of [0, 2, 3, 4, 6, 7, 8, 9]) {
+            const channelAddress = await instance.m_paymentChannels(channel);
+            assert.equal(await instance.m_investmentsByPaymentChannel(channelAddress), 0);
+        }
+        assert.equal(await web3.eth.getBalance(instance.address), web3.toWei(103, 'finney'));
+    });
+
+    it("test creation gas usage", async function() {
+        const instance = await InvestmentAnalytics.new({from: accounts[0]});
+        await instance.createMorePaymentChannels(100, {from: accounts[0], gas: 0x47E7C4});
+        assert.equal(await instance.paymentChannelsCount(), 27);
     });
 });
