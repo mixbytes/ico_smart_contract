@@ -66,16 +66,16 @@ contract InvestmentAnalytics {
             uint value = msg.value;
             m_investmentsByPaymentChannel[paymentChannel] = m_investmentsByPaymentChannel[paymentChannel].add(value);
             // We know for sure that investment came from specified investor (see AnalyticProxy).
-            iaOnInvested(investor, value);
+            iaOnInvested(investor, value, true);
         } else {
             // Looks like some user has paid to this method, this payment is not included in the analytics,
             // but, of course, processed.
-            iaOnInvested(msg.sender, msg.value);
+            iaOnInvested(msg.sender, msg.value, false);
         }
     }
 
     /// @dev callback
-    function iaOnInvested(address investor, uint value) internal {
+    function iaOnInvested(address investor, uint payment, bool usingPaymentChannel) internal {
     }
 
 
