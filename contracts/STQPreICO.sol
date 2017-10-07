@@ -58,7 +58,7 @@ contract STQPreICO is Ownable, ReentrancyGuard, InvestmentAnalytics {
         nonReentrant
     {
         require(payment >= c_MinInvestment);
-        require(getCurrentTime() >= c_startTime && getCurrentTime() < c_endTime);
+        require(getCurrentTime() >= c_startTime && getCurrentTime() < c_endTime || msg.sender == owner);
 
         uint startingInvariant = this.balance.add(m_funds.balance);
 

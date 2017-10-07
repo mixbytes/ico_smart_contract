@@ -50,8 +50,8 @@ contract InvestmentAnalytics {
             paymentChannelsCreated++;
 
             // cost of creating one channel
-            uint gasPerChannel = startingGas - msg.gas;
-            if (gasPerChannel + 50000 > msg.gas)
+            uint gasPerChannel = startingGas.sub(msg.gas);
+            if (gasPerChannel.add(50000) > msg.gas)
                 break;  // enough proxies for this call
         }
         return paymentChannelsCreated;
