@@ -3,6 +3,7 @@
 // testrpc has to be run as testrpc -u 0 -u 1 -u 2 -u 3 -u 4 -u 5
 
 import {l, logEvents} from '../helpers/debug';
+import '../helpers/typeExt';
 
 const InvestmentAnalytics = artifacts.require("./crowdsale/InvestmentAnalyticsTestHelper.sol");
 const AnalyticProxy = artifacts.require("AnalyticProxy");
@@ -31,11 +32,19 @@ contract('InvestmentAnalytics', function(accounts) {
 
         assert.equal(await instance.m_investmentsByPaymentChannel(paymentChannel1), web3.toWei(40, 'finney'));
         assert.equal(await instance.m_investmentsByPaymentChannel(paymentChannel5), web3.toWei(50, 'finney'));
+        const expectedEmptyChannels = [];
         for (let channel of [0, 2, 3, 4, 6, 7, 8, 9]) {
             const channelAddress = await instance.m_paymentChannels(channel);
+            expectedEmptyChannels.push(channelAddress);
             assert.equal(await instance.m_investmentsByPaymentChannel(channelAddress), 0);
         }
         assert.equal(await web3.eth.getBalance(instance.address), web3.toWei(103, 'finney'));
+
+        // readAnalyticsMap test
+        assert.deepEqual(Object.fromKeysValues(... await instance.readAnalyticsMap()), Object.fromIterable([
+            [paymentChannel1, new web3.BigNumber(web3.toWei(40, 'finney'))],
+            [paymentChannel5, new web3.BigNumber(web3.toWei(50, 'finney'))]
+        ].concat(expectedEmptyChannels.map(addr => [addr, new web3.BigNumber(0)]))));
     });
 
     it("test creation gas usage", async function() {

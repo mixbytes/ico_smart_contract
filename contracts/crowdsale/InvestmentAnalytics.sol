@@ -83,6 +83,20 @@ contract InvestmentAnalytics {
         return m_paymentChannels.length;
     }
 
+    function readAnalyticsMap() public constant returns (address[], uint[]) {
+        address[] memory keys = new address[](m_paymentChannels.length);
+        uint[] memory values = new uint[](m_paymentChannels.length);
+
+        for (uint i = 0; i < m_paymentChannels.length; i++) {
+            address key = m_paymentChannels[i];
+            keys[i] = key;
+            values[i] = m_investmentsByPaymentChannel[key];
+        }
+
+        return (keys, values);
+    }
+
+
     mapping(address => uint256) public m_investmentsByPaymentChannel;
     mapping(address => bool) m_validPaymentChannels;
 
