@@ -83,7 +83,7 @@ contract InvestmentAnalytics {
         return m_paymentChannels.length;
     }
 
-    function readAnalyticsMap() public constant returns (address[], uint[]) {
+    function readAnalyticsMap() external constant returns (address[], uint[]) {
         address[] memory keys = new address[](m_paymentChannels.length);
         uint[] memory values = new uint[](m_paymentChannels.length);
 
@@ -94,6 +94,10 @@ contract InvestmentAnalytics {
         }
 
         return (keys, values);
+    }
+
+    function readPaymentChannels() external constant returns (address[]) {
+        return m_paymentChannels;
     }
 
 

@@ -30,7 +30,7 @@ contract STQPreICO is Ownable, ReentrancyGuard, InvestmentAnalytics {
     }
 
     /// @notice ICO participation
-    function buy() public payable {
+    function buy() public payable {     // dont mark as external!
         iaOnInvested(msg.sender, msg.value, false);
     }
 
@@ -89,6 +89,7 @@ contract STQPreICO is Ownable, ReentrancyGuard, InvestmentAnalytics {
         // record payment
         m_funds.transfer(payment);
         m_totalInvested = m_totalInvested.add(payment);
+        assert(m_totalInvested <= getMaximumFunds());
         FundTransfer(investor, payment, true);
 
         if (change > 0)
@@ -122,7 +123,7 @@ contract STQPreICO is Ownable, ReentrancyGuard, InvestmentAnalytics {
     uint public constant c_startTime = 1507766400;
 
     /// @notice end time of the pre-ICO
-    uint public constant c_endTime = c_startTime + 86400;
+    uint public constant c_endTime = c_startTime + (1 days);
 
     /// @notice minimum investment
     uint public constant c_MinInvestment = 10 finney;
