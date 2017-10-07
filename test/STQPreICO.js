@@ -38,6 +38,7 @@ contract('STQPreICO', function(accounts) {
 
 
     for (const [name, fn] of crowdsaleUTest(getRoles(), instantiate, {
+        extraPaymentFunction: 'buy',
         rate: 100000,
         startTime: (new Date('Thu, 12 Oct 2017 0:00:00 GMT')).getTime() / 1000,
         endTime: (new Date('Fri, 13 Oct 2017 0:00:00 GMT')).getTime() / 1000,
