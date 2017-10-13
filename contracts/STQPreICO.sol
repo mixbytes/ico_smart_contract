@@ -58,7 +58,8 @@ contract STQPreICO is Ownable, ReentrancyGuard, InvestmentAnalytics {
         nonReentrant
     {
         require(payment >= c_MinInvestment);
-        require(getCurrentTime() >= c_startTime && getCurrentTime() < c_endTime || msg.sender == owner);
+        require(getCurrentTime() >= getStartTime() && getCurrentTime() < getEndTime()
+                || investor == owner /* for final check */);
 
         uint startingInvariant = this.balance.add(m_funds.balance);
 
@@ -75,7 +76,7 @@ contract STQPreICO is Ownable, ReentrancyGuard, InvestmentAnalytics {
         }
 
         // calculate rate
-        uint bonusPercent = c_preICOBonusPercent;
+        uint bonusPercent = getPreICOBonus();
         bonusPercent += getLargePaymentBonus(payment);
         if (usingPaymentChannel)
             bonusPercent += c_paymentChannelBonusPercent;
@@ -111,32 +112,34 @@ contract STQPreICO is Ownable, ReentrancyGuard, InvestmentAnalytics {
         return now;
     }
 
-    /// @dev to be overridden in tests
+    /// @notice maximum investments to be accepted during pre-ICO
     function getMaximumFunds() internal constant returns (uint) {
-        return c_MaximumFunds;
+        return 3500 ether;
+    }
+
+    /// @notice start time of the pre-ICO
+    function getStartTime() internal constant returns (uint) {
+        return 1507766400;
+    }
+
+    /// @notice end time of the pre-ICO
+    function getEndTime() internal constant returns (uint) {
+        return getStartTime() + (1 days);
+    }
+
+    /// @notice pre-ICO bonus
+    function getPreICOBonus() internal constant returns (uint) {
+        return 40;
     }
 
 
     // FIELDS
 
-    /// @notice start time of the pre-ICO
-    uint public constant c_startTime = 1507766400;
-
-    /// @notice end time of the pre-ICO
-    uint public constant c_endTime = c_startTime + (1 days);
-
     /// @notice minimum investment
     uint public constant c_MinInvestment = 10 finney;
 
-    /// @notice maximum investments to be accepted during pre-ICO
-    uint public constant c_MaximumFunds = 3500 ether;
-
-
     /// @notice starting exchange rate of STQ
     uint public constant c_STQperETH = 100000;
-
-    /// @notice pre-ICO bonus
-    uint public constant c_preICOBonusPercent = 40;
 
     /// @notice authorised payment bonus
     uint public constant c_paymentChannelBonusPercent = 2;
