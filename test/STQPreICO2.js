@@ -28,7 +28,8 @@ contract('STQPreICO2', function(accounts) {
         startTime: (new Date('Wed, 18 Oct 2017 18:00:00 GMT')).getTime() / 1000,
         endTime: (new Date('Thu, 19 Oct 2017 18:00:00 GMT')).getTime() / 1000,
         maxTimeBonus: 35,
-        firstPostICOTxFinishesSale: false,
+        firstPostICOTxFinishesSale: true,
+        postICOTxThrows: false,
         hasAnalytics: true,
         analyticsPaymentBonus: 2
     }))

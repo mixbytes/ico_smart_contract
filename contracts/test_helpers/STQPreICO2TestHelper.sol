@@ -6,8 +6,8 @@ import '../STQPreICO2.sol';
 /// @title Test helper for STQPreICO2, DONT use it in production!
 contract STQPreICO2TestHelper is STQPreICO2 {
 
-    function STQPreICO2TestHelper(address token, address funds)
-        STQPreICO2(token, funds)
+    function STQPreICO2TestHelper(address token, address[] fundOwners)
+        STQPreICO2(token, fundOwners)
     {
     }
 

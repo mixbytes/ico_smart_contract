@@ -38,6 +38,7 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
         tokenTransfersDuringSale: false,
 
         firstPostICOTxFinishesSale: true,
+        postICOTxThrows: true,
 
         hasAnalytics: false,
         analyticsPaymentBonus: 0
@@ -230,16 +231,20 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
             if (settings.endTime) {
                 // too late
                 await crowdsale.setTime(settings.endTime, {from: role.owner1});
-                const postSaleTx = pay(crowdsale, {from: role.investor2, value: web3.toWei(20, 'finney')});
-                if (settings.firstPostICOTxFinishesSale)
+                let postSaleTx = pay(crowdsale, {from: role.investor2, value: web3.toWei(20, 'finney')});
+                if (settings.firstPostICOTxFinishesSale || !settings.postICOTxThrows)
                     // expecting first post-sale tx to succeed
                     await postSaleTx;
                 else
                     await expectThrow(postSaleTx);
                 await assertTokenBalances(token, expectedTokenBalances);    // anyway, nothing gained
 
-                await expectThrow(pay(crowdsale, {from: role.nobody, value: web3.toWei(20, 'finney')}));
-                assert.equal(await token.balanceOf(role.nobody), 0);
+                postSaleTx = pay(crowdsale, {from: role.nobody, value: web3.toWei(20, 'finney')});
+                if (!settings.postICOTxThrows)
+                    await postSaleTx;
+                else
+                    await expectThrow(postSaleTx);
+                assert.equal(await token.balanceOf(role.nobody), 0);    // anyway, nothing gained
             }
 
             const totalSupply = await token.totalSupply();
