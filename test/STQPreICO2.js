@@ -28,6 +28,8 @@ contract('STQPreICO2', function(accounts) {
         preCollectedFunds: web3.toWei(9, 'finney'),
         extraPaymentFunction: 'buy',
         rate: 100000,
+        softCap: web3.toWei(100, 'finney'),
+        hardCap: web3.toWei(400, 'finney'),
         startTime: (new Date('Wed, 18 Oct 2017 17:00:00 GMT')).getTime() / 1000,
         endTime: (new Date('Thu, 23 Oct 2017 17:00:00 GMT')).getTime() / 1000,
         maxTimeBonus: 35,

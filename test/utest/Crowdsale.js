@@ -33,6 +33,9 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
         // funds collected during previous sales and taken into consideration when computing caps
         preCollectedFunds: 0,
 
+        softCap: undefined,
+        hardCap: undefined,
+
         // extraPaymentFunction: '',
         // rate: ,
         startTime: undefined,
@@ -86,6 +89,21 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
         }
     }
 
+    // exec tx on multiowned contract
+    // @param args tx arguments
+    // @return promise
+    async function runMultiSigTx(contract, fn, args) {
+        const owners = await contract.getOwners();
+        let i = await contract.m_multiOwnedRequired() - 1;
+
+        for (; i; i--)
+            // first signatures
+            await fn(... args.concat({from: owners[i]}));
+
+        // the last signature
+        return fn(... args.concat({from: owners[i]}));
+    }
+
 
     function calcTokens(wei, rate, bonuses) {
         const base = new web3.BigNumber(wei).mul(rate);
@@ -99,13 +117,7 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
         await expectThrow(funds.sendEther(role.nobody, web3.toWei(20, 'finney'), {from: role.nobody}));
         await expectThrow(funds.sendEther(role.investor3, web3.toWei(20, 'finney'), {from: role.investor3}));
 
-        const owners = await funds.getOwners();
-        let i = await funds.m_multiOwnedRequired() - 1;
-        for (; i; i--)
-            // first signatures
-            await funds.sendEther(role.owner1, web3.toWei(20, 'finney'), {from: owners[i]});
-        // the last signature
-        await expectThrow(funds.sendEther(role.owner1, web3.toWei(20, 'finney'), {from: owners[i]}));
+        await expectThrow(runMultiSigTx(funds, funds.sendEther, [role.owner1, web3.toWei(20, 'finney')]));
     }
 
     // asserting that collected ether cant be withdrawn by investors
@@ -152,6 +164,14 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
         }
 
         return [sale, token, funds];
+    }
+
+    async function runFirstPostSaleTx(txPromise) {
+        if (settings.firstPostICOTxFinishesSale || !settings.postICOTxThrows)
+            // expecting first post-sale tx to succeed
+            await txPromise;
+        else
+            await expectThrow(txPromise);
     }
 
 
@@ -276,30 +296,20 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
             if (settings.endTime) {
                 // too late
                 await crowdsale.setTime(settings.endTime, {from: role.owner1});
-                let postSaleTx = pay(crowdsale, {from: role.investor2, value: web3.toWei(20, 'finney')});
-                if (settings.firstPostICOTxFinishesSale || !settings.postICOTxThrows)
-                    // expecting first post-sale tx to succeed
-                    await postSaleTx;
-                else
-                    await expectThrow(postSaleTx);
+                await runFirstPostSaleTx(pay(crowdsale, {from: role.investor2, value: web3.toWei(20, 'finney')}));
+                await assertBalances(crowdsale, token, funds, cashInitial, web3.toWei(150, 'finney'));
                 await assertTokenBalances(token, expectedTokenBalances);    // anyway, nothing gained
 
-                postSaleTx = pay(crowdsale, {from: role.nobody, value: web3.toWei(20, 'finney')});
-                if (!settings.postICOTxThrows)
-                    await postSaleTx;
-                else
-                    await expectThrow(postSaleTx);
-                assert.equal(await token.balanceOf(role.nobody), 0);    // anyway, nothing gained
+                await checkNotInvesting(crowdsale, token, funds);
+                if (usingFund)
+                    await checkNotWithdrawing(funds);
             }
 
             const totalSupply = await token.totalSupply();
             const totalSupplyExpected = Object.values(expectedTokenBalances).reduce((accumulator, currentValue) => accumulator.add(currentValue));
             assertBigNumberEqual(totalSupply, totalSupplyExpected);
 
-            await checkNotInvesting(crowdsale, token, funds);
             if (usingFund) {
-                await checkNotWithdrawing(funds);
-
                 assert.equal(await funds.getInvestorsCount(), 2);
                 assert.equal(await funds.m_investors(0), role.investor1);
                 assert.equal(await funds.m_investors(1), role.investor2);
@@ -307,7 +317,8 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
         }]);
 
 
-        tests.push([testName("test max cap"), async function() {
+        if (settings.hardCap)
+        tests.push([testName("test hard cap"), async function() {
             const [crowdsale, token, funds] = await ourInstantiate();
             const cashInitial = await getFundsBalance(funds);
             const expectedTokenBalances = {};
@@ -325,12 +336,12 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
             await pay(crowdsale, {from: role.investor3, value: web3.toWei(2000, 'finney'), gasPrice: 0});
 
             const investor3spent = investor3initial.sub(await web3.eth.getBalance(role.investor3));
-            const expectedPayment = new web3.BigNumber(web3.toWei(380, 'finney')).sub(settings.preCollectedFunds);
+            const expectedPayment = new web3.BigNumber(settings.hardCap).sub(web3.toWei(20, 'finney')).sub(settings.preCollectedFunds);
             assertBigNumberEqual(investor3spent, expectedPayment, 'change has to be sent');
 
             // optional assert.equal(await crowdsale.m_state(), 4);
             await assertBalances(crowdsale, token, funds, cashInitial,
-                    new web3.BigNumber(web3.toWei(400, 'finney')).sub(settings.preCollectedFunds));
+                    new web3.BigNumber(settings.hardCap).sub(settings.preCollectedFunds));
             expectedTokenBalances[role.investor3] = calcTokens(expectedPayment, settings.rate,
                     [settings.maxTimeBonus, paymentBonus]);
             await assertTokenBalances(token, expectedTokenBalances);
@@ -340,6 +351,95 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
                 await checkNotWithdrawing(funds);
         }]);
 
+        if (settings.softCap) {
+            if (!usingFund)
+                throw new Error('softCap makes no sense without fund which can refund payments');
+            if (! settings.endTime)
+                throw new Error('softCap makes no sense without endTime');
+
+            tests.push([testName("test soft cap"), async function() {
+                const [crowdsale, token, funds] = await ourInstantiate();
+                const cashInitial = await getFundsBalance(funds);
+
+                if (settings.startTime)
+                    await crowdsale.setTime(settings.startTime, {from: role.owner1});
+
+                await pay(crowdsale, {from: role.investor1, value: web3.toWei(20, 'finney')});
+                await assertBalances(crowdsale, token, funds, cashInitial, web3.toWei(20, 'finney'));
+
+                await pay(crowdsale, {from: role.investor2, value: web3.toWei(60, 'finney')});
+                await assertBalances(crowdsale, token, funds, cashInitial, web3.toWei(80, 'finney'));
+
+                // time is out
+                await crowdsale.setTime(settings.endTime, {from: role.owner1});
+                await runFirstPostSaleTx(pay(crowdsale, {from: role.investor1, value: web3.toWei(100, 'finney')}));
+                await assertBalances(crowdsale, token, funds, cashInitial, web3.toWei(80, 'finney'));
+                assert(web3.toBigNumber(web3.toWei(80, 'finney')).add(settings.preCollectedFunds).lt(settings.softCap));
+
+                assert.equal(await funds.m_state(), 1);
+
+                await expectThrow(funds.withdrawPayments({from: role.investor3}));
+                await expectThrow(funds.withdrawPayments({from: role.owner3}));
+                await funds.withdrawPayments({from: role.investor2});
+                await assertBalances(crowdsale, token, funds, cashInitial, web3.toWei(20, 'finney'));
+
+                await expectThrow(funds.withdrawPayments({from: role.nobody}));
+
+                await checkNoTransfers(token);
+                await checkNotInvesting(crowdsale, token, funds);
+                await checkNotSendingEther(funds);
+
+                await funds.withdrawPayments({from: role.investor1});
+                await assertBalances(crowdsale, token, funds, cashInitial, web3.toWei(0, 'finney'));
+          }]);
+        }
+    }
+
+
+    if (usingFund) {
+        if (! settings.endTime)
+            throw new Error('makes no sense to use fund without endTime');
+
+        tests.push(["test sending ether", async function() {
+            const [crowdsale, token, funds] = await ourInstantiate();
+            const cashInitial = await getFundsBalance(funds);
+
+            if (settings.startTime)
+                await crowdsale.setTime(settings.startTime, {from: role.owner1});
+
+            await crowdsale.sendTransaction({from: role.investor1, value: web3.toWei(20, 'finney')});
+            await assertBalances(crowdsale, token, funds, cashInitial, web3.toWei(20, 'finney'));
+
+            await crowdsale.sendTransaction({from: role.investor2, value: web3.toWei(100, 'finney')});
+            await assertBalances(crowdsale, token, funds, cashInitial, web3.toWei(120, 'finney'));
+
+            // time is out
+            await crowdsale.setTime(settings.endTime, {from: role.owner1});
+            await runFirstPostSaleTx(crowdsale.sendTransaction({from: role.investor1, value: web3.toWei(100, 'finney')}));
+            await assertBalances(crowdsale, token, funds, cashInitial, web3.toWei(120, 'finney'));
+            if (settings.softCap)
+                assert(web3.toBigNumber(web3.toWei(120, 'finney')).add(settings.preCollectedFunds).gt(settings.softCap));
+
+            await checkNotInvesting(crowdsale, token, funds);
+            await checkNotWithdrawing(funds);
+
+            const x12125_initial = web3.eth.getBalance('0x1212500000000000000000000000000000000000');
+            const x12126_initial = web3.eth.getBalance('0x1212600000000000000000000000000000000000');
+            await runMultiSigTx(funds, funds.sendEther, ['0x1212500000000000000000000000000000000000', web3.toWei(40, 'finney')]);
+            assertBigNumberEqual((await web3.eth.getBalance('0x1212500000000000000000000000000000000000')).sub(x12125_initial), web3.toWei(40, 'finney'));
+            await assertBalances(crowdsale, token, funds, cashInitial, web3.toWei(80, 'finney'));
+
+            await runMultiSigTx(funds, funds.sendEther, ['0x1212600000000000000000000000000000000000', web3.toWei(10, 'finney')]);
+            assertBigNumberEqual((await web3.eth.getBalance('0x1212600000000000000000000000000000000000')).sub(x12126_initial), web3.toWei(10, 'finney'));
+            await assertBalances(crowdsale, token, funds, cashInitial, web3.toWei(70, 'finney'));
+
+            await runMultiSigTx(funds, funds.sendEther, ['0x1212500000000000000000000000000000000000', web3.toWei(55, 'finney')]);
+            assertBigNumberEqual((await web3.eth.getBalance('0x1212500000000000000000000000000000000000')).sub(x12125_initial), web3.toWei(95, 'finney'));
+            await assertBalances(crowdsale, token, funds, cashInitial, web3.toWei(15, 'finney'));
+
+            await checkNotInvesting(crowdsale, token, funds);
+            await checkNotWithdrawing(funds);
+        }]);
     }
 
 
