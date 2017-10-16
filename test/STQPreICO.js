@@ -12,13 +12,13 @@ contract('STQPreICO', function(accounts) {
 
     async function instantiate(role) {
         const token = await STQToken.new([role.owner1, role.owner2, role.owner3], {from: role.nobody});
-        const preICO = await STQPreICO.new(token.address, role.cash, {from: role.nobody});
-        preICO.transferOwnership(role.owner1, {from: role.nobody});
+        const preICO = await STQPreICO.new(token.address, role.owner3, {from: role.nobody});
+        await preICO.transferOwnership(role.owner1, {from: role.nobody});
 
         await token.setController(preICO.address, {from: role.owner1});
         await token.setController(preICO.address, {from: role.owner2});
 
-        return [preICO, token, role.cash];
+        return [preICO, token, role.owner3];
     }
 
 

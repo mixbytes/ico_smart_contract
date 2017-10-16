@@ -11,7 +11,6 @@ import '../helpers/typeExt';
 
 function getRoles(accounts) {
     return {
-        cash: accounts[0],
         owner3: accounts[0],
         owner1: accounts[1],
         owner2: accounts[2],
@@ -29,6 +28,11 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
     // default settings
 
     const defaultSettings = {
+        // if true gathered ether goes to contract FundsRegistry, otherwise to pre-existed account
+        usingFund: false,
+        // funds collected during previous sales and taken into consideration when computing caps
+        preCollectedFunds: 0,
+
         // extraPaymentFunction: '',
         // rate: ,
         startTime: undefined,
@@ -51,8 +55,7 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
 
     // utility consts
 
-    // if true gathered ether goes to contract, otherwise to pre-existed account
-    const usingFund = !('cash' in role);
+    const usingFund = settings.usingFund;
     const AnalyticProxy = settings.hasAnalytics ? artifacts.require("AnalyticProxy") : undefined;
 
 
@@ -63,10 +66,15 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
             message ? message + ': ' : ''));
     }
 
+    // gets balance of account/contract which store funds
+    async function getFundsBalance(funds) {
+        return await web3.eth.getBalance(usingFund ? funds.address : funds);
+    }
+
     async function assertBalances(sale, token, cash, cashInitial, cashAdded) {
         assert.equal(await web3.eth.getBalance(sale.address), 0, "expecting balance of the sale to be empty");
         assert.equal(await web3.eth.getBalance(token.address), 0, "expecting balance of the token to be empty");
-        const actualCashAdded = (await web3.eth.getBalance(cash)).sub(cashInitial);
+        const actualCashAdded = (await getFundsBalance(cash)).sub(cashInitial);
         assert(actualCashAdded.eq(cashAdded), "expecting invested cash to be {0}, but got: {1}".format(cashAdded, actualCashAdded));
     }
 
@@ -78,12 +86,50 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
         }
     }
 
+
     function calcTokens(wei, rate, bonuses) {
         const base = new web3.BigNumber(wei).mul(rate);
         const bonusesSum = bonuses.reduce((accumulator, currentValue) => accumulator + currentValue);
         return base.mul(100 + bonusesSum).div(100);
     }
 
+
+    // asserting that collected ether cant be transferred to owners
+    async function checkNotSendingEther(funds) {
+        await expectThrow(funds.sendEther(role.nobody, web3.toWei(20, 'finney'), {from: role.nobody}));
+        await expectThrow(funds.sendEther(role.investor3, web3.toWei(20, 'finney'), {from: role.investor3}));
+
+        const owners = await funds.getOwners();
+        let i = await funds.m_multiOwnedRequired() - 1;
+        for (; i; i--)
+            // first signatures
+            await funds.sendEther(role.owner1, web3.toWei(20, 'finney'), {from: owners[i]});
+        // the last signature
+        await expectThrow(funds.sendEther(role.owner1, web3.toWei(20, 'finney'), {from: owners[i]}));
+    }
+
+    // asserting that collected ether cant be withdrawn by investors
+    async function checkNotWithdrawing(funds) {
+        for (const from_ of [role.nobody, role.owner1, role.investor1, role.investor2, role.investor3])
+            await expectThrow(funds.withdrawPayments({from: from_}));
+    }
+
+    // asserting that investments cant be made
+    async function checkNotInvesting(crowdsale, token, funds) {
+        const cashInitial = await getFundsBalance(funds);
+        for (const from_ of [role.nobody, role.owner1, role.investor1, role.investor2, role.investor3]) {
+            const startingBalance = await token.balanceOf(from_);
+            const tx = crowdsale.sendTransaction({from: from_, value: web3.toWei(20, 'finney')});
+            if (settings.postICOTxThrows)
+                await expectThrow(tx);
+            else
+                await tx;
+            assertBigNumberEqual(await token.balanceOf(from_), startingBalance);
+        }
+        await assertBalances(crowdsale, token, funds, cashInitial, 0);
+    }
+
+    // asserting that token is not circulating yet
     async function checkNoTransfers(token) {
         await expectThrow(token.transfer(role.nobody, 1000, {from: role.nobody}));
         await expectThrow(token.transfer(role.investor3, 1000, {from: role.nobody}));
@@ -96,7 +142,8 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
     // testing-related functions
 
     async function ourInstantiate() {
-        const [sale, token, cash] = await instantiate(role);
+        const [sale, token, funds] = await instantiate(role);
+        // funds is either external account or FundsRegistry
 
         if (settings.hasAnalytics) {
             await sale.createMorePaymentChannels(5, {from: role.owner1});
@@ -104,7 +151,7 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
             sale.testNextPaymentChannel = 0;
         }
 
-        return [sale, token, cash];
+        return [sale, token, funds];
     }
 
 
@@ -128,20 +175,18 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
 
 
     tests.push(["test instantiation", async function() {
-        const cashInitial = usingFund ? 0 : await web3.eth.getBalance(role.cash);
-
         const [sale, token, cash] = await ourInstantiate();
 
         assert.equal(await token.m_controller(), sale.address);
 
-        await assertBalances(sale, token, cash, cashInitial, 0);
+        await assertBalances(sale, token, cash, usingFund ? 0 : await web3.eth.getBalance(cash), 0);
     }]);
 
 
     if (paymentFunctions.length > 1) {
         tests.push(["test mixing payment functions", async function() {
             const [crowdsale, token, funds] = await ourInstantiate();
-            const cashInitial = await web3.eth.getBalance(funds);
+            const cashInitial = await getFundsBalance(funds);
             const expectedTokenBalances = {};
 
             if (settings.startTime)
@@ -173,7 +218,7 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
 
         tests.push([testName("test investments"), async function() {
             const [crowdsale, token, funds] = await ourInstantiate();
-            const cashInitial = await web3.eth.getBalance(funds);
+            const cashInitial = await getFundsBalance(funds);
             const expectedTokenBalances = {};
 
             if (settings.startTime) {
@@ -223,10 +268,10 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
             if (! settings.tokenTransfersDuringSale)
                 await checkNoTransfers(token);
 
-            /* optional checks
-            await checkNotWithdrawing(crowdsale, token, funds);
-            await checkNotSendingEther(crowdsale, token, funds);
-            */
+            if (usingFund) {
+                await checkNotWithdrawing(funds);
+                await checkNotSendingEther(funds);
+            }
 
             if (settings.endTime) {
                 // too late
@@ -251,20 +296,20 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
             const totalSupplyExpected = Object.values(expectedTokenBalances).reduce((accumulator, currentValue) => accumulator.add(currentValue));
             assertBigNumberEqual(totalSupply, totalSupplyExpected);
 
-            /* optional checks
             await checkNotInvesting(crowdsale, token, funds);
-            await checkNotWithdrawing(crowdsale, token, funds);
+            if (usingFund) {
+                await checkNotWithdrawing(funds);
 
-            assert.equal(await funds.getInvestorsCount(), 3);
-            assert.equal(await funds.m_investors(0), role.investor1);
-            assert.equal(await funds.m_investors(1), role.investor2);
-            assert.equal(await funds.m_investors(2), role.investor3);*/
+                assert.equal(await funds.getInvestorsCount(), 2);
+                assert.equal(await funds.m_investors(0), role.investor1);
+                assert.equal(await funds.m_investors(1), role.investor2);
+            }
         }]);
 
 
         tests.push([testName("test max cap"), async function() {
             const [crowdsale, token, funds] = await ourInstantiate();
-            const cashInitial = await web3.eth.getBalance(funds);
+            const cashInitial = await getFundsBalance(funds);
             const expectedTokenBalances = {};
 
             if (settings.startTime)
@@ -280,17 +325,19 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
             await pay(crowdsale, {from: role.investor3, value: web3.toWei(2000, 'finney'), gasPrice: 0});
 
             const investor3spent = investor3initial.sub(await web3.eth.getBalance(role.investor3));
-            assertBigNumberEqual(investor3spent, web3.toWei(380, 'finney'), 'change has to be sent');
+            const expectedPayment = new web3.BigNumber(web3.toWei(380, 'finney')).sub(settings.preCollectedFunds);
+            assertBigNumberEqual(investor3spent, expectedPayment, 'change has to be sent');
 
             // optional assert.equal(await crowdsale.m_state(), 4);
-            await assertBalances(crowdsale, token, funds, cashInitial, web3.toWei(400, 'finney'));
-            expectedTokenBalances[role.investor3] = calcTokens(web3.toWei(380, 'finney'), settings.rate,
+            await assertBalances(crowdsale, token, funds, cashInitial,
+                    new web3.BigNumber(web3.toWei(400, 'finney')).sub(settings.preCollectedFunds));
+            expectedTokenBalances[role.investor3] = calcTokens(expectedPayment, settings.rate,
                     [settings.maxTimeBonus, paymentBonus]);
             await assertTokenBalances(token, expectedTokenBalances);
 
-            /* optional checks
             await checkNotInvesting(crowdsale, token, funds);
-            await checkNotWithdrawing(crowdsale, token, funds);*/
+            if (usingFund)
+                await checkNotWithdrawing(funds);
         }]);
 
     }
@@ -299,7 +346,7 @@ export function crowdsaleUTest(accounts, instantiate, settings) {
     if (settings.hasAnalytics)
         tests.push(["test payment channels", async function() {
             const [crowdsale, token, funds] = await ourInstantiate();
-            const cashInitial = await web3.eth.getBalance(funds);
+            const cashInitial = await getFundsBalance(funds);
             const expectedTokenBalances = {};
 
             await expectThrow(crowdsale.createMorePaymentChannels(5, {from: role.investor3}));

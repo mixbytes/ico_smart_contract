@@ -21,6 +21,14 @@ contract STQPreICO2TestHelper is STQPreICO2 {
     }
 
 
+    function getWeiCollected() public constant returns (uint) {
+        return getTotalInvestmentsStored().add(9 finney /* previous crowdsales */);
+    }
+
+    function getMinimumFunds() internal constant returns (uint) {
+        return 100 finney;
+    }
+
     function getMaximumFunds() internal constant returns (uint) {
         return 400 finney;
     }
