@@ -3,6 +3,7 @@ pragma solidity 0.4.15;
 import './ownership/multiowned.sol';
 import './crowdsale/FixedTimeBonuses.sol';
 import './crowdsale/FundsRegistry.sol';
+import './crowdsale/InvestmentAnalytics.sol';
 import './security/ArgumentsChecker.sol';
 import './STQToken.sol';
 import 'zeppelin-solidity/contracts/ReentrancyGuard.sol';
@@ -11,7 +12,7 @@ import 'zeppelin-solidity/contracts/math/SafeMath.sol';
 
 
 /// @title Storiqa ICO contract
-contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned {
+contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, InvestmentAnalytics {
     using Math for uint256;
     using SafeMath for uint256;
     using FixedTimeBonuses for FixedTimeBonuses.Data;
@@ -94,22 +95,22 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned {
 
     // fallback function as a shortcut
     function() payable {
+        require(0 == msg.data.length);
         buy();  // only internal call here!
     }
 
     /// @notice ICO participation
-    /// @return number of STQ tokens bought (with all decimal symbols)
-    function buy()
-        public
-        payable
+    function buy() public payable {     // dont mark as external!
+        iaOnInvested(msg.sender, msg.value, false);
+    }
+
+    function iaOnInvested(address investor, uint payment, bool usingPaymentChannel)
+        internal
         nonReentrant
         timedStateChange
         requiresState(IcoState.ICO)
         fundsChecker
-        returns (uint)
     {
-        address investor = msg.sender;
-        uint256 payment = msg.value;
         require(payment >= c_MinInvestment);
 
         uint startingInvariant = this.balance.add(m_funds.balance);
@@ -121,7 +122,7 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned {
         uint256 change = msg.value.sub(payment);
 
         // issue tokens
-        uint stq = calcSTQAmount(payment);
+        uint stq = calcSTQAmount(payment, usingPaymentChannel ? c_paymentChannelBonusPercent : 0);
         m_token.mint(investor, stq);
 
         // record payment
@@ -140,8 +141,6 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned {
         }
         else
             assert(startingInvariant == this.balance.add(m_funds.balance));
-
-        return stq;
     }
 
 
@@ -208,6 +207,10 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned {
     {
     }
 
+    function createMorePaymentChannels(uint limit) external onlyowner returns (uint) {
+        return createMorePaymentChannelsInternal(limit);
+    }
+
 
     // INTERNAL functions
 
@@ -269,10 +272,10 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned {
     }
 
     /// @dev calculates amount of STQ to which payer of _wei is entitled
-    function calcSTQAmount(uint _wei) private constant returns (uint) {
+    function calcSTQAmount(uint _wei, uint extraBonus) private constant returns (uint) {
         uint stq = _wei.mul(c_STQperETH);
 
-        uint bonus = m_bonuses.getBonus(getCurrentTime()).add(getLargePaymentBonus(_wei));
+        uint bonus = extraBonus.add(m_bonuses.getBonus(getCurrentTime())).add(getLargePaymentBonus(_wei));
 
         // apply bonus
         stq = stq.mul(bonus.add(100)).div(100);
@@ -307,7 +310,7 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned {
 
     /// @dev amount of investments during all crowdsales
     function getTotalInvested() internal constant returns (uint) {
-        return (2468 ether /* FIXME update me */).add(m_funds.totalInvested());
+        return m_funds.totalInvested().add(2468 ether /* FIXME update me */);
     }
 
 
@@ -327,6 +330,9 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned {
 
     /// @notice start time of the ICO
     uint public constant c_startTime = 1508889600;
+
+    /// @notice authorised payment bonus
+    uint public constant c_paymentChannelBonusPercent = 2;
 
     /// @notice timed bonuses
     FixedTimeBonuses.Data m_bonuses;
