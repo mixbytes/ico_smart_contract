@@ -108,9 +108,10 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
         internal
         nonReentrant
         timedStateChange
-        requiresState(IcoState.ICO)
         fundsChecker
     {
+        require(m_state == IcoState.ICO || m_state == IcoState.INIT && isOwner(investor) /* for final test */);
+
         require(payment >= c_MinInvestment);
 
         uint startingInvariant = this.balance.add(m_funds.balance);
