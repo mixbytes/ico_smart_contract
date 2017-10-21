@@ -17,7 +17,16 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
     using SafeMath for uint256;
     using FixedTimeBonuses for FixedTimeBonuses.Data;
 
-    enum IcoState { INIT, ICO, PAUSED, FAILED, SUCCEEDED }
+    enum IcoState { INIT, ICO, PAUSED, FAILED, DISTRIBUTING_BONUSES, SUCCEEDED }
+
+    /// @dev bookkeeping for last investment bonus
+    struct LastInvestment {
+        address investor;
+        uint payment;
+
+        // time-based bonus which was already received by the investor
+        uint timeBonus;
+    }
 
 
     event StateChanged(IcoState _state);
@@ -88,6 +97,8 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
         m_bonuses.bonuses.push(FixedTimeBonuses.Bonus({endTime: c_startTime + (8 weeks), bonus: 5}));
         m_bonuses.bonuses.push(FixedTimeBonuses.Bonus({endTime: 1514246400, bonus: 0}));
         m_bonuses.validate(true);
+
+        deployer = msg.sender;
     }
 
 
@@ -123,12 +134,14 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
         uint256 change = msg.value.sub(payment);
 
         // issue tokens
-        uint stq = calcSTQAmount(payment, usingPaymentChannel ? c_paymentChannelBonusPercent : 0);
+        var (stq, timeBonus) = calcSTQAmount(payment, usingPaymentChannel ? c_paymentChannelBonusPercent : 0);
         m_token.mint(investor, stq);
 
         // record payment
         m_funds.invested.value(payment)(investor);
         FundTransfer(investor, payment, true);
+
+        recordInvestment(investor, payment, timeBonus);
 
         // check if ICO must be closed early
         if (change > 0)
@@ -208,7 +221,37 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
     {
     }
 
-    function createMorePaymentChannels(uint limit) external onlyowner returns (uint) {
+    /// @notice computing and distributing post-ICO bonuses
+    function distributeBonuses(uint investorsLimit)
+        external
+        timedStateChange
+        requiresState(IcoState.DISTRIBUTING_BONUSES)
+    {
+        uint limitIndex = uint(m_lastInvestments.length).min256(m_nextUndestributedBonusIndex + investorsLimit);
+        uint iterations = 0;
+        uint startingGas = msg.gas;
+        while (m_nextUndestributedBonusIndex < limitIndex) {
+            if (c_lastInvestmentsBonus > m_lastInvestments[m_nextUndestributedBonusIndex].timeBonus) {
+                uint bonus = c_lastInvestmentsBonus.sub(m_lastInvestments[m_nextUndestributedBonusIndex].timeBonus);
+                uint bonusSTQ = m_lastInvestments[m_nextUndestributedBonusIndex].payment.mul(c_STQperETH).mul(bonus).div(100);
+
+                m_token.mint(m_lastInvestments[m_nextUndestributedBonusIndex].investor, bonusSTQ);
+            }
+            m_nextUndestributedBonusIndex++;
+
+            // preventing gas limit hit
+            uint avgGasPerIteration = startingGas.sub(msg.gas).div(++iterations);
+            if (msg.gas < avgGasPerIteration * 3)
+                break;
+        }
+
+        if (m_nextUndestributedBonusIndex == m_lastInvestments.length)
+            changeState(IcoState.SUCCEEDED);
+    }
+
+
+    function createMorePaymentChannels(uint limit) external returns (uint) {
+        require(isOwner(msg.sender) || msg.sender == deployer);
         return createMorePaymentChannelsInternal(limit);
     }
 
@@ -219,7 +262,7 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
         if (getTotalInvested() < getMinFunds())
             changeState(IcoState.FAILED);
         else
-            changeState(IcoState.SUCCEEDED);
+            changeState(IcoState.DISTRIBUTING_BONUSES);
     }
 
     /// @dev performs only allowed state transitions
@@ -227,8 +270,9 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
         assert(m_state != _newState);
 
         if (IcoState.INIT == m_state) {        assert(IcoState.ICO == _newState); }
-        else if (IcoState.ICO == m_state) {    assert(IcoState.PAUSED == _newState || IcoState.FAILED == _newState || IcoState.SUCCEEDED == _newState); }
+        else if (IcoState.ICO == m_state) {    assert(IcoState.PAUSED == _newState || IcoState.FAILED == _newState || IcoState.DISTRIBUTING_BONUSES == _newState); }
         else if (IcoState.PAUSED == m_state) { assert(IcoState.ICO == _newState || IcoState.FAILED == _newState); }
+        else if (IcoState.DISTRIBUTING_BONUSES == m_state) { assert(IcoState.SUCCEEDED == _newState); }
         else assert(false);
 
         m_state = _newState;
@@ -273,16 +317,33 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
     }
 
     /// @dev calculates amount of STQ to which payer of _wei is entitled
-    function calcSTQAmount(uint _wei, uint extraBonus) private constant returns (uint) {
-        uint stq = _wei.mul(c_STQperETH);
-
-        uint bonus = extraBonus.add(m_bonuses.getBonus(getCurrentTime())).add(getLargePaymentBonus(_wei));
+    function calcSTQAmount(uint _wei, uint extraBonus) private constant returns (uint stq, uint timeBonus) {
+        timeBonus = m_bonuses.getBonus(getCurrentTime());
+        uint bonus = extraBonus.add(timeBonus).add(getLargePaymentBonus(_wei));
 
         // apply bonus
-        stq = stq.mul(bonus.add(100)).div(100);
-
-        return stq;
+        stq = _wei.mul(c_STQperETH).mul(bonus.add(100)).div(100);
     }
+
+    /// @dev records investments in a circular buffer
+    function recordInvestment(address investor, uint payment, uint timeBonus) private {
+        uint writeTo;
+        assert(m_lastInvestments.length <= c_maxLastInvestments);
+        if (m_lastInvestments.length < c_maxLastInvestments) {
+            // buffer is still expanding
+            writeTo = m_lastInvestments.length++;
+        }
+        else {
+            // reusing buffer
+            writeTo = m_nextFreeLastInvestmentIndex++;
+            if (m_nextFreeLastInvestmentIndex == m_lastInvestments.length)
+                m_nextFreeLastInvestmentIndex = 0;
+        }
+
+        assert(writeTo < m_lastInvestments.length);
+        m_lastInvestments[writeTo] = LastInvestment(investor, payment, timeBonus);
+    }
+
 
     /// @dev start time of the ICO, inclusive
     function getStartTime() private constant returns (uint) {
@@ -338,11 +399,25 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
     /// @notice timed bonuses
     FixedTimeBonuses.Data m_bonuses;
 
+    uint public constant c_maxLastInvestments = 100;
+
+    uint public constant c_lastInvestmentsBonus = 30;
+
+    /// @dev bookkeeping for last investment bonus
+    LastInvestment[] public m_lastInvestments;
+
+    uint m_nextFreeLastInvestmentIndex;
+
+    uint m_nextUndestributedBonusIndex;
+
+
     /// @dev state of the ICO
     IcoState public m_state = IcoState.INIT;
 
     /// @dev contract responsible for token accounting
     STQToken public m_token;
+
+    address public deployer;
 
     /// @dev contract responsible for investments accounting
     FundsRegistry public m_funds;
