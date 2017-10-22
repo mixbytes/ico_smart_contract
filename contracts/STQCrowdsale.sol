@@ -44,7 +44,7 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
         if (IcoState.INIT == m_state && getCurrentTime() >= getStartTime())
             changeState(IcoState.ICO);
 
-        if (IcoState.ICO == m_state && getCurrentTime() > getEndTime()) {
+        if (IcoState.ICO == m_state && getCurrentTime() >= getEndTime()) {
             finishICO();
 
             if (msg.value > 0)
@@ -57,8 +57,6 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
 
     /// @dev automatic check for unaccounted withdrawals
     modifier fundsChecker() {
-        assert(m_state == IcoState.ICO);
-
         uint atTheBeginning = m_funds.balance;
         if (atTheBeginning < m_lastFundsAmount) {
             changeState(IcoState.PAUSED);
@@ -79,15 +77,17 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
 
     // PUBLIC interface
 
-    function STQCrowdsale(address[] _owners, address _token, address _funds)
+    function STQCrowdsale(address[] _owners, address _token, address _funds, address _teamTokens)
         multiowned(_owners, 2)
         validAddress(_token)
         validAddress(_funds)
+        validAddress(_teamTokens)
     {
         require(3 == _owners.length);
 
         m_token = STQToken(_token);
         m_funds = FundsRegistry(_funds);
+        m_teamTokens = _teamTokens;
 
         m_bonuses.bonuses.push(FixedTimeBonuses.Bonus({endTime: c_startTime + (1 weeks), bonus: 30}));
         m_bonuses.bonuses.push(FixedTimeBonuses.Bonus({endTime: c_startTime + (2 weeks), bonus: 25}));
@@ -288,9 +288,8 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
 
     function onSuccess() private {
         // mint tokens for owners
-        uint tokensPerOwner = m_token.totalSupply().mul(4).div(m_numOwners);
-        for (uint i = 0; i < m_numOwners; i++)
-            m_token.mint(getOwner(i), tokensPerOwner);
+        uint tokensForTeam = m_token.totalSupply().mul(40).div(60);
+        m_token.mint(m_teamTokens, tokensForTeam);
 
         m_funds.changeState(FundsRegistry.State.SUCCEEDED);
         m_funds.detachController();
@@ -416,6 +415,8 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
 
     /// @dev contract responsible for token accounting
     STQToken public m_token;
+
+    address public m_teamTokens;
 
     address public deployer;
 

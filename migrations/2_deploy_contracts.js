@@ -9,7 +9,7 @@ const FundsRegistry = artifacts.require("./FundsRegistry.sol");
 
 module.exports = function(deployer, network) {
   deployer.deploy(FundsRegistry, _owners, 2, 0).then(function(){
-    return deployer.deploy(STQCrowdsale, _owners, STQTokenAddress, FundsRegistry.address);
+    return deployer.deploy(STQCrowdsale, _owners, STQTokenAddress, FundsRegistry.address, '0x0Eed5de3487aEC55bA585212DaEDF35104c27bAF');
   });
 
   // owners have to manually perform
