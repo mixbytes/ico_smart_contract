@@ -327,8 +327,8 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
     /// @dev records investments in a circular buffer
     function recordInvestment(address investor, uint payment, uint timeBonus) private {
         uint writeTo;
-        assert(m_lastInvestments.length <= c_maxLastInvestments);
-        if (m_lastInvestments.length < c_maxLastInvestments) {
+        assert(m_lastInvestments.length <= getLastMaxInvestments());
+        if (m_lastInvestments.length < getLastMaxInvestments()) {
             // buffer is still expanding
             writeTo = m_lastInvestments.length++;
         }
@@ -372,6 +372,11 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
     /// @dev amount of investments during all crowdsales
     function getTotalInvested() internal constant returns (uint) {
         return m_funds.totalInvested().add(2468 ether /* FIXME update me */);
+    }
+
+    /// @dev to be overridden in tests
+    function getLastMaxInvestments() internal constant returns (uint) {
+        return c_maxLastInvestments;
     }
 
 

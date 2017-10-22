@@ -34,5 +34,15 @@ contract STQCrowdsaleTestHelper is STQCrowdsale {
     }
 
 
+    function getLastMaxInvestments() internal constant returns (uint) {
+        return m_maxLastInvestments;
+    }
+
+    function setLastMaxInvestments(uint value) external onlyowner {
+        m_maxLastInvestments = value;
+    }
+
+
     uint m_time;
+    uint m_maxLastInvestments = c_maxLastInvestments;
 }
