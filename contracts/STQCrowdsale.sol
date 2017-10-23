@@ -39,16 +39,18 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
     }
 
     /// @dev triggers some state changes based on current time
+    /// @param investor optional refund parameter
+    /// @param payment optional refund parameter
     /// note: function body could be skipped!
-    modifier timedStateChange() {
+    modifier timedStateChange(address investor, uint payment) {
         if (IcoState.INIT == m_state && getCurrentTime() >= getStartTime())
             changeState(IcoState.ICO);
 
         if (IcoState.ICO == m_state && getCurrentTime() >= getEndTime()) {
             finishICO();
 
-            if (msg.value > 0)
-                msg.sender.transfer(msg.value);
+            if (payment > 0)
+                investor.transfer(payment);
             // note that execution of further (but not preceding!) modifiers and functions ends here
         } else {
             _;
@@ -56,12 +58,14 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
     }
 
     /// @dev automatic check for unaccounted withdrawals
-    modifier fundsChecker() {
+    /// @param investor optional refund parameter
+    /// @param payment optional refund parameter
+    modifier fundsChecker(address investor, uint payment) {
         uint atTheBeginning = m_funds.balance;
         if (atTheBeginning < m_lastFundsAmount) {
             changeState(IcoState.PAUSED);
-            if (msg.value > 0)
-                msg.sender.transfer(msg.value); // we cant throw (have to save state), so refunding this way
+            if (payment > 0)
+                investor.transfer(payment);     // we cant throw (have to save state), so refunding this way
             // note that execution of further (but not preceding!) modifiers and functions ends here
         } else {
             _;
@@ -118,8 +122,8 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
     function iaOnInvested(address investor, uint payment, bool usingPaymentChannel)
         internal
         nonReentrant
-        timedStateChange
-        fundsChecker
+        timedStateChange(investor, payment)
+        fundsChecker(investor, payment)
     {
         require(m_state == IcoState.ICO || m_state == IcoState.INIT && isOwner(investor) /* for final test */);
 
@@ -163,7 +167,7 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
     /// @notice pauses ICO
     function pause()
         external
-        timedStateChange
+        timedStateChange(address(0), 0)
         requiresState(IcoState.ICO)
         onlyowner
     {
@@ -173,7 +177,7 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
     /// @notice resume paused ICO
     function unpause()
         external
-        timedStateChange
+        timedStateChange(address(0), 0)
         requiresState(IcoState.PAUSED)
         onlymanyowners(sha3(msg.data))
     {
@@ -184,7 +188,7 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
     /// @notice consider paused ICO as failed
     function fail()
         external
-        timedStateChange
+        timedStateChange(address(0), 0)
         requiresState(IcoState.PAUSED)
         onlymanyowners(sha3(msg.data))
     {
@@ -195,7 +199,7 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
     function setToken(address _token)
         external
         validAddress(_token)
-        timedStateChange
+        timedStateChange(address(0), 0)
         requiresState(IcoState.PAUSED)
         onlymanyowners(sha3(msg.data))
     {
@@ -206,7 +210,7 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
     function setFundsRegistry(address _funds)
         external
         validAddress(_funds)
-        timedStateChange
+        timedStateChange(address(0), 0)
         requiresState(IcoState.PAUSED)
         onlymanyowners(sha3(msg.data))
     {
@@ -216,7 +220,7 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
     /// @notice explicit trigger for timed state changes
     function checkTime()
         public
-        timedStateChange
+        timedStateChange(address(0), 0)
         onlyowner
     {
     }
@@ -224,7 +228,7 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
     /// @notice computing and distributing post-ICO bonuses
     function distributeBonuses(uint investorsLimit)
         external
-        timedStateChange
+        timedStateChange(address(0), 0)
         requiresState(IcoState.DISTRIBUTING_BONUSES)
     {
         uint limitIndex = uint(m_lastInvestments.length).min256(m_nextUndestributedBonusIndex + investorsLimit);

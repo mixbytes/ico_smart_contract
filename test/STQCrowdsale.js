@@ -1,6 +1,6 @@
 'use strict';
 
-// testrpc has to be run as testrpc -u 0 -u 1 -u 2 -u 3 -u 4 -u 5
+// testrpc has to be run as testrpc -u 0 -u 1 -u 2 -u 3 -u 4 -u 5 -u 6
 
 import './helpers/typeExt';
 import expectThrow from './helpers/expectThrow';
@@ -21,7 +21,8 @@ contract('STQCrowdsale', function(accounts) {
             investor1: accounts[2],
             investor2: accounts[3],
             investor3: accounts[4],
-            nobody: accounts[5]
+            deployer: accounts[5],
+            nobody: accounts[6]
         };
     }
 
