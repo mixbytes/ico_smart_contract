@@ -375,7 +375,7 @@ contract STQCrowdsale is ArgumentsChecker, ReentrancyGuard, multiowned, Investme
 
     /// @dev amount of investments during all crowdsales
     function getTotalInvested() internal constant returns (uint) {
-        return m_funds.totalInvested().add(4281 ether /* FIXME update me */);
+        return m_funds.totalInvested().add(4426 ether);
     }
 
     /// @dev to be overridden in tests
