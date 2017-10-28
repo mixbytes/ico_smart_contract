@@ -20,7 +20,8 @@ function getRoles(accounts) {
         investor2: accounts[3],
         investor3: accounts[4],
         deployer: accounts[5],
-        nobody: accounts[6]
+        nobody: accounts[6],
+        wallet: accounts[7]
     };
 }
 
